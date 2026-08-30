@@ -316,6 +316,14 @@
         background: var(--color-accent);
     }
 
+    /* Face-scan mode switch (take a photo / upload a photo) */
+    .scan-tab {
+        @apply relative -mb-px inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-xs font-medium text-ink-faint transition-colors hover:text-ink-soft;
+    }
+    .scan-tab.is-active {
+        @apply border-accent text-ink;
+    }
+
     /* Table */
     .table-clean {
         @apply w-full border-collapse text-sm;

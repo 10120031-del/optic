@@ -127,23 +127,26 @@ export function getLandmarker() {
 }
 
 /**
- * Detect and measure in one step. Throws with a message suitable for showing
- * to the customer when the photo isn't usable.
+ * Detect and measure a single still. Returns null when there's no usable
+ * face, so callers can decide whether that's an error or just a frame to
+ * skip during live preview.
  */
-export async function measureImage(image) {
+export async function measureSource(source, width, height) {
     const landmarker = await getLandmarker();
-    const landmarks = landmarker.detect(image).faceLandmarks?.[0];
+    const landmarks = landmarker.detect(source).faceLandmarks?.[0];
 
-    if (!landmarks) {
-        throw new Error(
-            'No face detected. Try a brighter, straight-on photo with your whole face in frame.'
-        );
-    }
+    return landmarks ? measure(landmarks, width, height) : null;
+}
 
-    const measurements = measure(landmarks, image.naturalWidth, image.naturalHeight);
-
+/**
+ * Rejects measurements we shouldn't act on. Throws with copy meant for the
+ * customer rather than the console.
+ */
+export function assertUsable(measurements) {
     if (!measurements) {
-        throw new Error('Could not locate your eyes clearly. Try a sharper photo.');
+        throw new Error(
+            'No face detected. Try a brighter, straight-on shot with your whole face in frame.'
+        );
     }
 
     if (measurements.yaw_ratio < 0.82 || measurements.yaw_ratio > 1.22) {
@@ -153,4 +156,68 @@ export async function measureImage(image) {
     }
 
     return measurements;
+}
+
+export async function measureImage(image) {
+    return assertUsable(await measureSource(image, image.naturalWidth, image.naturalHeight));
+}
+
+const median = (values) => {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+
+/**
+ * Measure from a live camera by sampling several frames and taking the median
+ * of each value.
+ *
+ * A single video frame is a worse input than an uploaded photo: the stream is
+ * lower resolution and any small movement blurs the iris, which is the thing
+ * the whole millimetre scale depends on. Landmark jitter between frames is
+ * largely independent, so the median across a short burst is markedly steadier
+ * than any one frame — and unlike a mean, one badly blurred frame can't drag
+ * the result.
+ */
+export async function measureVideo(video, { samples = 9, intervalMs = 55 } = {}) {
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+
+    if (!width || !height) {
+        throw new Error('The camera is still starting up. Give it a moment and try again.');
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+
+    const frames = [];
+
+    for (let i = 0; i < samples; i++) {
+        context.drawImage(video, 0, 0, width, height);
+        const measurements = await measureSource(canvas, width, height);
+        if (measurements) frames.push(measurements);
+
+        if (i < samples - 1) {
+            await new Promise((resolve) => setTimeout(resolve, intervalMs));
+        }
+    }
+
+    // Demand a clear majority of usable frames. A face that only registers
+    // intermittently means the framing or lighting isn't good enough to
+    // trust whatever did come through.
+    if (frames.length < Math.ceil(samples * 0.6)) {
+        throw new Error(
+            'Could not get a steady read. Hold still, make sure your face is well lit, and try again.'
+        );
+    }
+
+    const merged = {};
+    for (const key of Object.keys(frames[0])) {
+        merged[key] = round(median(frames.map((frame) => frame[key])), key === 'yaw_ratio' ? 3 : 1);
+    }
+
+    return assertUsable(merged);
 }
