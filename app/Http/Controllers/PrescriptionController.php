@@ -7,6 +7,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PrescriptionController extends Controller
 {
@@ -55,6 +56,32 @@ class PrescriptionController extends Controller
         $request->user()->prescriptions()->create($data);
 
         return redirect()->route('prescriptions.index')->with('status', 'Prescription saved.');
+    }
+
+    /**
+     * Stream a prescription's uploaded scan.
+     *
+     * The file lives on the private disk (storage/app/private), so it is not
+     * reachable through the public/storage symlink and Laravel's built-in
+     * /storage/{path} route rejects it without a signature. Serving it here
+     * instead keeps the authorisation explicit: the owner, or staff who need
+     * it to verify the numbers. A stranger gets a 404 rather than a 403 so
+     * the URL space doesn't confirm which prescription ids exist.
+     */
+    public function file(Request $request, Prescription $prescription): StreamedResponse
+    {
+        $user = $request->user();
+
+        abort_unless(
+            $prescription->file_path && ($prescription->user_id === $user->id || $user->isAdmin()),
+            404
+        );
+
+        return Storage::disk('local')->response($prescription->file_path, null, [
+            'Content-Security-Policy' => "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+            'X-Content-Type-Options' => 'nosniff',
+            'Cache-Control' => 'private, no-store, max-age=0',
+        ]);
     }
 
     public function destroy(Request $request, Prescription $prescription): RedirectResponse

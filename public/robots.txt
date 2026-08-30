@@ -1,2 +1,15 @@
 User-agent: *
-Disallow:
+
+# Catalogue pages are the point of the site — crawl them.
+Allow: /
+
+# Account, checkout and staff areas: no public value, and crawling them
+# just burns budget on pages that redirect to login.
+Disallow: /admin
+Disallow: /cart
+Disallow: /checkout
+Disallow: /orders
+Disallow: /prescriptions
+Disallow: /login
+Disallow: /register
+Disallow: /storage/

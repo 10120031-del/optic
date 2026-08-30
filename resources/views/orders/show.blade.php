@@ -123,12 +123,21 @@
 
             @if ($order->payments->isNotEmpty())
                 <div class="hairline-top mt-5 pt-5">
-                    <p class="field-label !mb-2">{{ __('Payments') }}</p>
+                    <p class="field-label !mb-2">{{ __('Payment') }}</p>
                     @foreach ($order->payments as $payment)
                         <div class="flex items-center justify-between text-xs">
-                            <span class="text-ink-soft">{{ str($payment->method)->replace('_', ' ') }}</span>
+                            <span class="text-ink-soft">{{ str($payment->method)->replace('_', ' ')->title() }}</span>
                             <x-status-badge :status="$payment->status" />
                         </div>
+                        @if ($payment->status === \App\Models\Payment::STATUS_PENDING)
+                            <p class="mt-1.5 text-xs text-ink-faint">
+                                {{ __('Have :amount ready for the courier — payment is collected on delivery.', ['amount' => '$'.number_format($payment->amount, 2)]) }}
+                            </p>
+                        @elseif ($payment->status === \App\Models\Payment::STATUS_COMPLETED && $payment->paid_at)
+                            <p class="mt-1.5 text-xs text-ink-faint">
+                                {{ __('Received :date.', ['date' => $payment->paid_at->format('M j, Y')]) }}
+                            </p>
+                        @endif
                     @endforeach
                 </div>
             @endif

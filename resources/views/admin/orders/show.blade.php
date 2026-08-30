@@ -95,10 +95,15 @@
                     <div class="hairline-top mt-4 pt-4 space-y-1.5">
                         @foreach ($order->payments as $payment)
                             <div class="flex items-center justify-between text-xs">
-                                <span class="text-ink-soft">{{ str($payment->method)->replace('_', ' ') }}</span>
+                                <span class="text-ink-soft">{{ str($payment->method)->replace('_', ' ')->title() }}</span>
                                 <x-status-badge :status="$payment->status" />
                             </div>
                         @endforeach
+                        @if ($order->payments->contains('status', \App\Models\Payment::STATUS_PENDING))
+                            <p class="text-xs text-ink-faint">
+                                {{ __('Cash still to collect. Setting the status below to Paid or Delivered records it as received.') }}
+                            </p>
+                        @endif
                     </div>
                 @endif
             </div>

@@ -33,16 +33,20 @@
             </section>
 
             <section class="hairline-top pt-8">
-                <p class="eyebrow mb-4">{{ __('Payment method') }}</p>
-                <div class="space-y-2.5">
-                    @foreach (['card' => __('Card'), 'paypal' => __('PayPal'), 'cash_on_delivery' => __('Cash on delivery'), 'bank_transfer' => __('Bank transfer')] as $value => $label)
-                        <label class="flex cursor-pointer items-center gap-3 rounded-[3px] border border-hairline-strong p-3 transition-colors has-[:checked]:border-accent has-[:checked]:bg-accent-soft">
-                            <input type="radio" name="payment_method" value="{{ $value }}" class="accent-accent" @checked($loop->first) required>
-                            <span class="text-sm text-ink">{{ $label }}</span>
-                        </label>
-                    @endforeach
+                <p class="eyebrow mb-4">{{ __('Payment') }}</p>
+                <div class="flex items-start gap-3 rounded-[3px] border border-hairline-strong bg-accent-soft p-4">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" class="mt-0.5 size-5 shrink-0 text-accent" aria-hidden="true">
+                        <rect x="2.5" y="6" width="19" height="12" rx="2" />
+                        <circle cx="12" cy="12" r="2.4" />
+                        <path d="M6 12h.01M18 12h.01" />
+                    </svg>
+                    <div>
+                        <p class="text-sm font-medium text-ink">{{ __('Cash on delivery') }}</p>
+                        <p class="mt-1 text-xs text-ink-soft">
+                            {{ __('Pay the courier in cash when your order arrives — :total, including shipping. Nothing is charged now, and we never ask for card details.', ['total' => '$'.number_format($totals['total'], 2)]) }}
+                        </p>
+                    </div>
                 </div>
-                <p class="mt-2 text-xs text-ink-faint">{{ __('Card and PayPal are marked paid immediately in this environment; cash on delivery and bank transfer stay pending until fulfilled.') }}</p>
             </section>
 
             <button type="submit" class="btn-accent w-full">{{ __('Place order') }}</button>

@@ -39,7 +39,7 @@
             @if ($prescription->file_path)
                 <div class="panel p-5">
                     <p class="eyebrow mb-3">{{ __('Uploaded file') }}</p>
-                    <a href="{{ Storage::url($prescription->file_path) }}" target="_blank" class="text-sm text-ink underline hover:no-underline">{{ __('Open file') }}</a>
+                    <a href="{{ route('prescriptions.file', $prescription) }}" target="_blank" class="text-sm text-ink underline hover:no-underline">{{ __('Open file') }}</a>
                 </div>
             @endif
         </div>

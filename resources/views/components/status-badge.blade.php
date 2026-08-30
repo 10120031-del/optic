@@ -3,7 +3,7 @@
 @php
     $signal = ['delivered', 'paid', 'completed', 'approved', 'verified', 'exchanged', 'item_received'];
     $warn = ['pending', 'processing', 'shipped', 'requested'];
-    $danger = ['cancelled', 'rejected', 'refunded'];
+    $danger = ['cancelled', 'rejected', 'refunded', 'failed'];
 
     $variant = match (true) {
         in_array($status, $signal, true) => 'badge-signal',

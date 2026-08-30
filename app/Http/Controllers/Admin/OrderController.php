@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
+use App\Models\Payment;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -69,6 +70,8 @@ class OrderController extends Controller
 
         $order->update($changes);
 
+        $this->settlePayments($order, $data['status']);
+
         OrderStatusHistory::create([
             'order_id' => $order->id,
             'status' => $data['status'],
@@ -77,5 +80,43 @@ class OrderController extends Controller
         ]);
 
         return back()->with('status', 'Order updated.');
+    }
+
+    /**
+     * Keep the payment record in step with the status the owner just set.
+     *
+     * Everything is cash on delivery, so there is no gateway callback to tell
+     * us the money arrived — the owner marking the order paid or delivered
+     * *is* the confirmation that the courier collected it. Doing it here
+     * rather than in a separate screen means staff can't leave an order
+     * delivered with its payment still showing as outstanding.
+     */
+    private function settlePayments(Order $order, string $status): void
+    {
+        if (in_array($status, ['paid', 'delivered'], true)) {
+            $order->payments()
+                ->where('status', Payment::STATUS_PENDING)
+                ->update(['status' => Payment::STATUS_COMPLETED, 'paid_at' => now()]);
+
+            // 'delivered' sets delivered_at above but not paid_at, and an
+            // order can be delivered without ever passing through 'paid'.
+            if (! $order->paid_at) {
+                $order->update(['paid_at' => now()]);
+            }
+        }
+
+        // Nothing was ever collected on a cancelled order, so close the
+        // pending payment out rather than leaving it owing forever.
+        if ($status === 'cancelled') {
+            $order->payments()
+                ->where('status', Payment::STATUS_PENDING)
+                ->update(['status' => Payment::STATUS_FAILED]);
+        }
+
+        if ($status === 'refunded') {
+            $order->payments()
+                ->where('status', Payment::STATUS_COMPLETED)
+                ->update(['status' => Payment::STATUS_REFUNDED]);
+        }
     }
 }

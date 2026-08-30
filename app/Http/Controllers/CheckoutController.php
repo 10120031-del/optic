@@ -49,7 +49,6 @@ class CheckoutController extends Controller
             'shipping_city' => ['required', 'string', 'max:255'],
             'shipping_postal_code' => ['nullable', 'string', 'max:20'],
             'shipping_country' => ['required', 'string', 'max:100'],
-            'payment_method' => ['required', 'in:card,paypal,cash_on_delivery,bank_transfer'],
         ]);
 
         $cart = $this->carts->current($request);
@@ -132,29 +131,17 @@ class CheckoutController extends Controller
                 'changed_by' => $request->user()->id,
             ]);
 
-            // No real payment gateway is wired up yet. Card/PayPal are
-            // recorded as completed so the flow is testable end to end;
-            // swap this block for an actual Stripe/PayPal charge + webhook
-            // before going live. Cash on delivery / bank transfer stay
-            // pending until fulfilled manually by staff.
-            $isPrepaid = in_array($data['payment_method'], ['card', 'paypal'], true);
-
+            // The shop is cash on delivery only — no money moves online, so
+            // there is nothing to charge here and no gateway to call. The
+            // payment opens as pending for the full order total and is
+            // settled by the owner when the courier hands the parcel over
+            // (Admin\OrderController::updateStatus).
             Payment::create([
                 'order_id' => $order->id,
-                'method' => $data['payment_method'],
-                'status' => $isPrepaid ? 'completed' : 'pending',
+                'method' => Payment::METHOD_CASH_ON_DELIVERY,
+                'status' => Payment::STATUS_PENDING,
                 'amount' => $totals['total'],
-                'paid_at' => $isPrepaid ? now() : null,
             ]);
-
-            if ($isPrepaid) {
-                $order->update(['status' => 'paid', 'paid_at' => now()]);
-                OrderStatusHistory::create([
-                    'order_id' => $order->id,
-                    'status' => 'paid',
-                    'changed_by' => $request->user()->id,
-                ]);
-            }
 
             $cart->eyeglasses()->delete();
             $cart->contactLenses()->delete();

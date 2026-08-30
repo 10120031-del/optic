@@ -94,6 +94,13 @@ Route::middleware(['auth', 'customer'])->group(function () {
     Route::delete('/reviews/{review}', [ReviewController::class, 'destroy'])->name('reviews.destroy');
 });
 
+// Prescription scans live on the private disk. Served through the controller
+// (which checks owner-or-staff) rather than a public URL, and kept out of the
+// 'customer' group so staff reviewing an upload aren't bounced to the dashboard.
+Route::get('/prescriptions/{prescription}/file', [PrescriptionController::class, 'file'])
+    ->middleware('auth')
+    ->name('prescriptions.file');
+
 /*
 |--------------------------------------------------------------------------
 | Admin (shop owner / staff)

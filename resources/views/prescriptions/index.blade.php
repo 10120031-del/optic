@@ -47,7 +47,7 @@
 
                     <div class="hairline-top mt-4 flex items-center justify-between pt-4">
                         @if ($prescription->file_path)
-                            <a href="{{ Storage::url($prescription->file_path) }}" target="_blank" class="text-xs text-ink underline hover:no-underline">{{ __('View file') }}</a>
+                            <a href="{{ route('prescriptions.file', $prescription) }}" target="_blank" class="text-xs text-ink underline hover:no-underline">{{ __('View file') }}</a>
                         @else
                             <span></span>
                         @endif

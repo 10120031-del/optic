@@ -17,6 +17,12 @@ return Application::configure(basePath: dirname(__DIR__))
             'admin' => EnsureUserIsAdmin::class,
             'customer' => EnsureUserIsCustomer::class,
         ]);
+
+        // In production the app sits behind a reverse proxy / load balancer
+        // terminating TLS. Without this, Laravel sees the plain HTTP hop from
+        // the proxy and builds http:// URLs on an https:// site (mixed
+        // content, broken redirects) and logs the proxy's IP for every visitor.
+        $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
