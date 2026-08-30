@@ -8,6 +8,7 @@ use App\Models\Frame;
 use App\Models\Lens;
 use App\Models\LensFeature;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Storage;
 
 class CatalogSeeder extends Seeder
 {
@@ -128,10 +129,28 @@ class CatalogSeeder extends Seeder
                 ->values();
             $record->faceShapes()->sync($recommended);
 
-            $record->images()->updateOrCreate(
-                ['frame_id' => $record->id, 'sort_order' => 0],
-                ['path' => "frames/{$frame['sku']}-front.jpg", 'alt_text' => "{$frame['name']} front view", 'is_primary' => true],
-            );
+            // Only ever *add* a starter image, never overwrite one.
+            //
+            // This used to be an updateOrCreate, which meant re-running the
+            // seeder on an environment where staff had uploaded real photos
+            // silently replaced their paths with the placeholder name below —
+            // a file that doesn't ship with the repo — leaving every card
+            // pointing at a 404.
+            //
+            // The existence check matters too: a row whose file is missing
+            // renders a broken <img>, whereas no row at all renders the
+            // designed placeholder in the frame-card component.
+            $placeholder = "frames/{$frame['sku']}-front.jpg";
+
+            if (! $record->images()->where('sort_order', 0)->exists()
+                && Storage::disk('public')->exists($placeholder)) {
+                $record->images()->create([
+                    'sort_order' => 0,
+                    'path' => $placeholder,
+                    'alt_text' => "{$frame['name']} front view",
+                    'is_primary' => true,
+                ]);
+            }
         }
     }
 
