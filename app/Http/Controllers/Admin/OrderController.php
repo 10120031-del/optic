@@ -19,7 +19,7 @@ class OrderController extends Controller
         $orders = Order::query()
             ->with('user')
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->toString()))
-            ->when($request->filled('q'), fn ($q) => $q->where('order_number', 'like', '%'.$request->string('q')->toString().'%'))
+            ->when($request->filled('q'), fn ($q) => $q->whereLike('order_number', '%'.$request->string('q')->toString().'%'))
             ->orderByDesc('created_at')
             ->paginate(25)
             ->withQueryString();

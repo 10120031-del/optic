@@ -45,7 +45,7 @@ with queued email, and a dashboard.
 
 ## Running it locally
 
-Requires PHP 8.2+, Composer, Node 20+, and MySQL 8 / MariaDB 10.6+.
+Requires PHP 8.2+, Composer, Node 20+, and MySQL 8 / MariaDB 10.6+ (PostgreSQL 14+ also works — see [DEPLOYMENT.md](DEPLOYMENT.md) §2.5).
 
 ```bash
 git clone https://github.com/10120031-del/optic

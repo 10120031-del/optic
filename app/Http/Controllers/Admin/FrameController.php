@@ -52,8 +52,8 @@ class FrameController extends Controller
     public function index(Request $request): View
     {
         $frames = Frame::query()
-            ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->string('q')->toString().'%')
-                ->orWhere('sku', 'like', '%'.$request->string('q')->toString().'%'))
+            ->when($request->filled('q'), fn ($q) => $q->whereLike('name', '%'.$request->string('q')->toString().'%')
+                ->orWhereLike('sku', '%'.$request->string('q')->toString().'%'))
             ->orderByDesc('created_at')
             ->paginate(25)
             ->withQueryString();

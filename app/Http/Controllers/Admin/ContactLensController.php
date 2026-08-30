@@ -31,7 +31,7 @@ class ContactLensController extends Controller
     public function index(Request $request): View
     {
         $lenses = ContactLens::query()
-            ->when($request->filled('q'), fn ($q) => $q->where('name', 'like', '%'.$request->string('q')->toString().'%'))
+            ->when($request->filled('q'), fn ($q) => $q->whereLike('name', '%'.$request->string('q')->toString().'%'))
             ->orderByDesc('created_at')
             ->paginate(25)
             ->withQueryString();

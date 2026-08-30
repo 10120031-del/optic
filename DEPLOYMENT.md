@@ -11,8 +11,8 @@ or Apache with php-fpm — the most common shape for a Laravel shop this size.
 | Requirement | Version | Why |
 |---|---|---|
 | PHP | 8.2 or newer | `composer.json` floor; 8.3/8.4 also fine |
-| PHP extensions | `bcmath`, `ctype`, `curl`, `dom`, `fileinfo`, `filter`, `hash`, `mbstring`, `openssl`, `pcre`, `pdo_mysql`, `session`, `tokenizer`, `xml` | Laravel's baseline plus MySQL |
-| MySQL / MariaDB | MySQL 8.0+ or MariaDB 10.6+ | `utf8mb4` and the migrations' index widths |
+| PHP extensions | `bcmath`, `ctype`, `curl`, `dom`, `fileinfo`, `filter`, `hash`, `mbstring`, `openssl`, `pcre`, `session`, `tokenizer`, `xml`, plus `pdo_mysql` **or** `pdo_pgsql` | Laravel's baseline plus a database driver |
+| Database | MySQL 8.0+ / MariaDB 10.6+, or PostgreSQL 14+ | The migrations are portable across both — see §2.5 |
 | Composer | 2.x | PHP dependencies |
 | Node.js + npm | Node 20 LTS or newer | Building CSS/JS; **only needed at build time** |
 | Outbound HTTPS | — | `npm install` downloads the 3.7 MB face-landmarker model |
@@ -72,6 +72,74 @@ server.** The default `DatabaseSeeder` is a development fixture that creates
 `admin@example.com` with a known password and a placeholder catalogue.
 `AppServiceProvider` also blocks `migrate:fresh` and `db:wipe` once
 `APP_ENV=production`, so a mistyped command can't drop the shop's data.
+
+---
+
+## 2.5 Connecting to a managed database by URI
+
+Hosted providers — Neon (which is what Netlify DB gives you), Supabase,
+Railway, Heroku, PlanetScale — hand you one connection string rather than five
+separate values. Laravel reads it from `DB_URL`; no code change is needed.
+
+```dotenv
+DB_CONNECTION=pgsql
+DB_URL=postgresql://user:password@ep-xyz-123.eu-central-1.aws.neon.tech/neondb?sslmode=require
+
+# DB_HOST=
+# DB_PORT=
+# DB_DATABASE=
+# DB_USERNAME=
+# DB_PASSWORD=
+```
+
+Three things decide whether this works:
+
+1. **`DB_CONNECTION` must match the URI's scheme.** `postgresql://` or
+   `postgres://` means `pgsql`; `mysql://` means `mysql`. `DB_URL` supplies the
+   host, port, database, username and password, but `DB_CONNECTION` still picks
+   *which* connection block in `config/database.php` supplies everything else
+   (charset, search path, SSL mode). Point it at the wrong one and Laravel will
+   try to speak MySQL to a Postgres server.
+2. **Comment the five `DB_*` lines out — do not merely blank them.** `DB_PORT=`
+   with nothing after it is an empty string, not an absent value, and it wins
+   over the driver's default. A Neon URI carries no port, so a leftover
+   `DB_PORT=3306` (or a blank one) sends the connection to the wrong port and
+   the error you get back does not mention the port at all.
+3. **Keep the whole query string.** `?sslmode=require` is not decoration —
+   managed Postgres refuses unencrypted connections, and Laravel merges those
+   query parameters into the connection config, overriding
+   `config/database.php`. Copy the URI verbatim, including anything after `&`.
+
+Check it before anything else runs:
+
+```bash
+php artisan db:show          # server version, connection name, table count
+php artisan migrate --force
+```
+
+`php artisan db:show` failing here is much easier to read than a migration
+failing halfway.
+
+### If you are moving from MySQL to PostgreSQL
+
+The schema and queries in this app are portable — the migrations use no
+MySQL-only column types, and the searches use `whereLike`, which compiles to
+`ILIKE` on Postgres so results stay case-insensitive on both engines. Two
+things still need care:
+
+- **Existing data does not travel by itself.** `mysqldump` output will not load
+  into Postgres. Run `php artisan migrate --force` against the new database to
+  build the schema, then `php artisan db:seed --class=ProductionSeeder --force`
+  for the reference rows, and re-enter or script the catalogue. Migrate real
+  order history with a tool such as `pgloader`, not by hand.
+- **`enum` columns become check constraints.** Adding a new order status or
+  payment method later is a migration on Postgres, exactly as it is on MySQL.
+
+> **Netlify hosts the database, not this app.** Netlify serves static files and
+> JavaScript functions; it cannot run PHP, so the Laravel side has to live
+> somewhere that can — a VPS, Railway, Render, Fly.io, DigitalOcean App
+> Platform, Laravel Cloud/Forge, or any shared host with PHP 8.2. The Netlify
+> DB connection string works fine from any of them.
 
 ---
 

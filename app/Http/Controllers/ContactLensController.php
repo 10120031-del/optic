@@ -14,8 +14,9 @@ class ContactLensController extends Controller
         $lenses = ContactLens::query()
             ->where('is_active', true)
             ->when($request->filled('q'), fn ($q) => $q->where(function ($q) use ($request) {
+                // Case-insensitive on Postgres too — see FrameController::index.
                 $term = '%'.$request->string('q')->toString().'%';
-                $q->where('name', 'like', $term)->orWhere('brand', 'like', $term);
+                $q->whereLike('name', $term)->orWhereLike('brand', $term);
             }))
             ->when($request->filled('type'), fn ($q) => $q->where('type', $request->string('type')->toString()))
             ->when($request->filled('material'), fn ($q) => $q->where('material', $request->string('material')->toString()))

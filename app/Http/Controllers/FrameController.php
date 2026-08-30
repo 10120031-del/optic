@@ -20,8 +20,12 @@ class FrameController extends Controller
         $frames = Frame::query()
             ->where('is_active', true)
             ->when($request->filled('q'), fn ($q) => $q->where(function ($q) use ($request) {
+                // whereLike, not where(...,'like',...): MySQL's default
+                // collation ignores case but Postgres' LIKE does not, and a
+                // shopper typing "harbor" should find "Harbor Classic" on
+                // either. whereLike compiles to ILIKE on Postgres.
                 $term = '%'.$request->string('q')->toString().'%';
-                $q->where('name', 'like', $term)->orWhere('brand', 'like', $term);
+                $q->whereLike('name', $term)->orWhereLike('brand', $term);
             }))
             ->when($request->filled('gender'), fn ($q) => $q->where('gender', $request->string('gender')->toString()))
             ->when($request->filled('color'), fn ($q) => $q->where('color', $request->string('color')->toString()))
