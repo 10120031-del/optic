@@ -1,0 +1,81 @@
+<?php
+
+namespace App\Http\Controllers\Admin;
+
+use App\Http\Controllers\Controller;
+use App\Models\Order;
+use App\Models\OrderStatusHistory;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+class OrderController extends Controller
+{
+    private const STATUSES = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+
+    public function index(Request $request): View
+    {
+        $orders = Order::query()
+            ->with('user')
+            ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->toString()))
+            ->when($request->filled('q'), fn ($q) => $q->where('order_number', 'like', '%'.$request->string('q')->toString().'%'))
+            ->orderByDesc('created_at')
+            ->paginate(25)
+            ->withQueryString();
+
+        return view('admin.orders.index', ['orders' => $orders, 'statuses' => self::STATUSES]);
+    }
+
+    public function show(Order $order): View
+    {
+        $order->load(['user', 'eyeglasses.frame', 'eyeglasses.lens', 'eyeglasses.features', 'contactLenses', 'payments', 'statusHistory.changedBy', 'returns.items']);
+
+        return view('admin.orders.show', ['order' => $order, 'statuses' => self::STATUSES]);
+    }
+
+    /**
+     * Requirement 6: staff mark orders shipped/delivered/etc. Every change
+     * lands in order_status_history so the customer's tracking page (and
+     * this order's audit trail) stays complete.
+     */
+    public function updateStatus(Request $request, Order $order): RedirectResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', 'in:'.implode(',', self::STATUSES)],
+            'note' => ['nullable', 'string', 'max:1000'],
+            'carrier' => ['nullable', 'string', 'max:255'],
+            'tracking_number' => ['nullable', 'string', 'max:255'],
+            'estimated_delivery_date' => ['nullable', 'date'],
+        ]);
+
+        $timestampField = match ($data['status']) {
+            'paid' => 'paid_at',
+            'shipped' => 'shipped_at',
+            'delivered' => 'delivered_at',
+            'cancelled' => 'cancelled_at',
+            default => null,
+        };
+
+        $changes = [
+            'status' => $data['status'],
+            'carrier' => $data['carrier'] ?? $order->carrier,
+            'tracking_number' => $data['tracking_number'] ?? $order->tracking_number,
+            'estimated_delivery_date' => $data['estimated_delivery_date'] ?? $order->estimated_delivery_date,
+        ];
+
+        if ($timestampField) {
+            $changes[$timestampField] = now();
+        }
+
+        $order->update($changes);
+
+        OrderStatusHistory::create([
+            'order_id' => $order->id,
+            'status' => $data['status'],
+            'note' => $data['note'] ?? null,
+            'changed_by' => $request->user()->id,
+        ]);
+
+        return back()->with('status', 'Order updated.');
+    }
+}
