@@ -48,8 +48,7 @@ with queued email, and a dashboard.
 Requires PHP 8.2+, Composer, Node 20+, and MySQL 8 / MariaDB 10.6+.
 
 ```bash
-git clone <your-repo-url> opticsWebSite
-cd opticsWebSite
+git clone https://github.com/10120031-del/optic
 cp .env.example .env
 ```
 
