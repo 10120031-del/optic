@@ -107,6 +107,11 @@ class User extends Authenticatable
         return $this->isOwner() || $this->isStaff() || $this->isDelivery();
     }
 
+    public function canAccessAdminConsole(): bool
+    {
+        return $this->isOwner() || $this->isStaff();
+    }
+
     public function isAdmin(): bool
     {
         return $this->isOwner();

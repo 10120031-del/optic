@@ -1,6 +1,6 @@
 <x-admin-layout :title="$order->order_number" :heading="$order->order_number">
     <nav class="-mt-4 mb-8 font-mono text-[11px] uppercase tracking-[0.06em] text-ink-faint">
-        <a href="{{ route('admin.orders.index') }}" class="hover:text-ink">{{ __('Orders') }}</a>
+        <a href="{{ route($orderRoutes['index']) }}" class="hover:text-ink">{{ __('Orders') }}</a>
         <span class="mx-1.5">/</span>
         <span class="text-ink-soft">{{ $order->order_number }}</span>
     </nav>
@@ -54,7 +54,7 @@
                 </div>
             </section>
 
-            @if ($order->returns->isNotEmpty())
+            @if (! auth()->user()?->isDelivery() && $order->returns->isNotEmpty())
                 <section>
                     <p class="eyebrow mb-4">{{ __('Returns & exchanges') }}</p>
                     <div class="space-y-2">
@@ -136,7 +136,7 @@
 
             <div class="panel p-6">
                 <p class="eyebrow mb-4">{{ __('Update status') }}</p>
-                <form method="POST" action="{{ route(auth()->user()?->isDelivery() ? 'delivery.orders.status' : 'admin.orders.status', $order) }}" class="space-y-3">
+                <form method="POST" action="{{ route($orderRoutes['status'], $order) }}" class="space-y-3">
                     @csrf @method('PATCH')
                     <select name="status" class="select">
                         @foreach ($statuses as $status)

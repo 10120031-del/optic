@@ -2,23 +2,34 @@
 
 @php
     $unreadNotifications = auth()->check() ? auth()->user()->unreadNotifications()->count() : 0;
+    $user = auth()->user();
 
-    // 'badge' is the count shown right-aligned on the tab. $pendingOrdersCount
-    // is passed in by the dashboard only, so it falls back to nothing elsewhere.
-    $navItems = [
-        ['label' => __('Inbox'), 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => $unreadNotifications],
-        ['label' => __('Dashboard'), 'route' => 'admin.dashboard', 'pattern' => 'admin.dashboard'],
-        ['label' => __('Frames'), 'route' => 'admin.frames.index', 'pattern' => 'admin.frames.*'],
-        ['label' => __('Lens Packages'), 'route' => 'admin.lenses.index', 'pattern' => 'admin.lenses.*'],
-        ['label' => __('Lens Features'), 'route' => 'admin.lens-features.index', 'pattern' => 'admin.lens-features.*'],
-        ['label' => __('Contact Lenses'), 'route' => 'admin.contact-lenses.index', 'pattern' => 'admin.contact-lenses.*'],
-        ['label' => __('Collections'), 'route' => 'admin.collections.index', 'pattern' => 'admin.collections.*'],
-        ['label' => __('Orders'), 'route' => 'admin.orders.index', 'pattern' => 'admin.orders.*', 'badge' => $pendingOrdersCount ?? 0],
-        ['label' => __('Returns'), 'route' => 'admin.returns.index', 'pattern' => 'admin.returns.*'],
-        ['label' => __('Prescriptions'), 'route' => 'admin.prescriptions.index', 'pattern' => 'admin.prescriptions.*'],
-        ['label' => __('Reviews'), 'route' => 'admin.reviews.index', 'pattern' => 'admin.reviews.*'],
-        ['label' => __('Promotions'), 'route' => 'admin.promotions.index', 'pattern' => 'admin.promotions.*'],
+    $allNavItems = [
+        ['label' => __('Inbox'), 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => $unreadNotifications, 'roles' => ['owner', 'staff', 'delivery']],
+        ['label' => __('Dashboard'), 'route' => 'admin.dashboard', 'pattern' => 'admin.dashboard', 'roles' => ['owner', 'staff']],
+        ['label' => __('Frames'), 'route' => 'admin.frames.index', 'pattern' => 'admin.frames.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Lens Packages'), 'route' => 'admin.lenses.index', 'pattern' => 'admin.lenses.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Lens Features'), 'route' => 'admin.lens-features.index', 'pattern' => 'admin.lens-features.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Contact Lenses'), 'route' => 'admin.contact-lenses.index', 'pattern' => 'admin.contact-lenses.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Collections'), 'route' => 'admin.collections.index', 'pattern' => 'admin.collections.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Orders'), 'route' => $user?->isDelivery() ? 'delivery.orders.index' : 'admin.orders.index', 'pattern' => $user?->isDelivery() ? 'delivery.orders.*' : 'admin.orders.*', 'badge' => $pendingOrdersCount ?? 0, 'roles' => ['owner', 'staff', 'delivery']],
+        ['label' => __('Returns'), 'route' => 'admin.returns.index', 'pattern' => 'admin.returns.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Prescriptions'), 'route' => 'admin.prescriptions.index', 'pattern' => 'admin.prescriptions.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Reviews'), 'route' => 'admin.reviews.index', 'pattern' => 'admin.reviews.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Promotions'), 'route' => 'admin.promotions.index', 'pattern' => 'admin.promotions.*', 'roles' => ['owner']],
     ];
+
+    $role = match (true) {
+        $user?->isOwner() => 'owner',
+        $user?->isStaff() => 'staff',
+        $user?->isDelivery() => 'delivery',
+        default => null,
+    };
+
+    $navItems = collect($allNavItems)
+        ->filter(fn ($item) => $role && in_array($role, $item['roles'], true))
+        ->values()
+        ->all();
 @endphp
 
 <!DOCTYPE html>
@@ -43,7 +54,7 @@
                 </span>
                 <div class="leading-tight">
                     <p class="font-display text-sm font-semibold">Lucent Optics</p>
-                    <p class="eyebrow">{{ __('Staff console') }}</p>
+                    <p class="eyebrow">{{ $user?->isDelivery() ? __('Delivery console') : __('Staff console') }}</p>
                 </div>
             </div>
 

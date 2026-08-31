@@ -20,6 +20,31 @@ class RolePermissionsTest extends TestCase
         $this->actingAs($staff)->get(route('admin.dashboard'))->assertOk();
     }
 
+    public function test_delivery_cannot_enter_admin_console(): void
+    {
+        $delivery = User::factory()->delivery()->create();
+
+        $this->actingAs($delivery)->get(route('admin.dashboard'))->assertStatus(403);
+        $this->actingAs($delivery)->get(route('admin.frames.index'))->assertStatus(403);
+        $this->actingAs($delivery)->get(route('admin.promotions.index'))->assertStatus(403);
+    }
+
+    public function test_staff_cannot_manage_promotions(): void
+    {
+        $staff = User::factory()->staff()->create();
+
+        $this->actingAs($staff)->get(route('admin.promotions.index'))->assertStatus(403);
+        $this->actingAs($staff)->get(route('admin.promotions.create'))->assertStatus(403);
+    }
+
+    public function test_owner_can_manage_promotions(): void
+    {
+        $owner = User::factory()->owner()->create();
+
+        $this->actingAs($owner)->get(route('admin.promotions.index'))->assertOk();
+        $this->actingAs($owner)->get(route('admin.promotions.create'))->assertOk();
+    }
+
     public function test_staff_cannot_cancel_orders(): void
     {
         $staff = User::factory()->staff()->create();

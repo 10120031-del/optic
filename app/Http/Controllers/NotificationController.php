@@ -22,7 +22,7 @@ class NotificationController extends Controller
     {
         $user = $request->user();
 
-        return view($user->isAdmin() ? 'admin.notifications.index' : 'notifications.index', [
+        return view($user->canAccessAdminConsole() ? 'admin.notifications.index' : 'notifications.index', [
             'notifications' => $user->notifications()->paginate(20),
             'unreadCount' => $user->unreadNotifications()->count(),
         ]);

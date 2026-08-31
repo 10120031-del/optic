@@ -1,12 +1,13 @@
 @props(['title' => null])
 
 @php
-    // Staff browse the storefront to review the catalogue, but they don't shop:
-    // skip the cart entirely so no cart row is created for an admin account.
-    $isStaff = auth()->check() && auth()->user()->isAdmin();
+    // Employees browse the storefront to review the catalogue, but they don't shop.
+    $isShopStaff = auth()->check() && auth()->user()->canAccessAdminConsole();
+    $isDelivery = auth()->check() && auth()->user()->isDelivery();
+    $isEmployee = $isShopStaff || $isDelivery;
     $cartCount = 0;
 
-    if (! $isStaff) {
+    if (! $isEmployee) {
         $cart = app(\App\Services\CartService::class)->current(request());
         $cartCount = $cart->eyeglasses()->sum('quantity') + $cart->contactLenses()->sum('quantity');
     }
@@ -56,7 +57,7 @@
                     </span>
                 </a>
                 @auth
-                    @unless ($isStaff)
+                    @unless ($isEmployee)
                         <a href="{{ route('orders.index') }}" class="nav-link {{ request()->routeIs('orders.*') ? 'is-active' : '' }}">{{ __('Orders') }}</a>
                         <a href="{{ route('prescriptions.index') }}" class="nav-link {{ request()->routeIs('prescriptions.*') ? 'is-active' : '' }}">{{ __('Prescriptions') }}</a>
                     @endunless
@@ -76,7 +77,7 @@
                     </a>
                 @endauth
 
-                @unless ($isStaff)
+                @unless ($isEmployee)
                 <a href="{{ route('cart.index') }}" class="nav-link relative flex items-center gap-1.5 {{ request()->routeIs('cart.*') ? 'is-active' : '' }}" aria-label="{{ __('Cart') }}">
                     <svg class="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
                         <path d="M4 6h2l1.6 10.2a2 2 0 0 0 2 1.8h7.4a2 2 0 0 0 2-1.7L20 9H7" stroke-linecap="round" stroke-linejoin="round" />
@@ -88,13 +89,15 @@
                     @endif
                 </a>
                 @else
-                    <span class="badge-neutral font-mono text-[10px] uppercase tracking-wider">{{ __('Staff view') }}</span>
+                    <span class="badge-neutral font-mono text-[10px] uppercase tracking-wider">{{ $isDelivery ? __('Delivery view') : __('Staff view') }}</span>
                 @endunless
 
                 @auth
                     <div class="hidden items-center gap-4 md:flex">
-                        @if ($isStaff)
+                        @if ($isShopStaff)
                             <a href="{{ route('admin.dashboard') }}" class="nav-link {{ request()->routeIs('admin.*') ? 'is-active' : '' }}">{{ __('Admin') }}</a>
+                        @elseif ($isDelivery)
+                            <a href="{{ route('delivery.orders.index') }}" class="nav-link {{ request()->routeIs('delivery.*') ? 'is-active' : '' }}">{{ __('Delivery') }}</a>
                         @endif
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
@@ -115,8 +118,10 @@
                 <a href="{{ route('notifications.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('notifications.*') ? 'is-active' : '' }}">
                     {{ __('Inbox') }}@if ($unreadNotifications > 0) ({{ $unreadNotifications }})@endif
                 </a>
-                @if ($isStaff)
+                @if ($isShopStaff)
                     <a href="{{ route('admin.dashboard') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('admin.*') ? 'is-active' : '' }}">{{ __('Admin') }}</a>
+                @elseif ($isDelivery)
+                    <a href="{{ route('delivery.orders.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('delivery.*') ? 'is-active' : '' }}">{{ __('Delivery') }}</a>
                 @else
                     <a href="{{ route('orders.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('orders.*') ? 'is-active' : '' }}">{{ __('Orders') }}</a>
                     <a href="{{ route('prescriptions.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('prescriptions.*') ? 'is-active' : '' }}">{{ __('Prescriptions') }}</a>
@@ -162,8 +167,10 @@
                     <div class="space-y-2">
                         <p class="text-ink-faint">{{ __('Account') }}</p>
                         @auth
-                            @if ($isStaff)
+                            @if ($isShopStaff)
                                 <a href="{{ route('admin.dashboard') }}" class="block hover:text-ink">{{ __('Staff console') }}</a>
+                            @elseif ($isDelivery)
+                                <a href="{{ route('delivery.orders.index') }}" class="block hover:text-ink">{{ __('Delivery console') }}</a>
                             @else
                                 <a href="{{ route('orders.index') }}" class="block hover:text-ink">{{ __('Orders') }}</a>
                                 <a href="{{ route('prescriptions.index') }}" class="block hover:text-ink">{{ __('Prescriptions') }}</a>

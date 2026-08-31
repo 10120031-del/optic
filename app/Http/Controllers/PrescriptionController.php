@@ -73,7 +73,7 @@ class PrescriptionController extends Controller
         $user = $request->user();
 
         abort_unless(
-            $prescription->file_path && ($prescription->user_id === $user->id || $user->isAdmin()),
+            $prescription->file_path && ($prescription->user_id === $user->id || $user->canAccessAdminConsole()),
             404
         );
 

@@ -8,7 +8,7 @@
 
     {{-- Staff moderate reviews from the admin console; they don't write them. --}}
     @auth
-        @unless (auth()->user()->isAdmin())
+        @unless (auth()->user()->canAccessAdminConsole() || auth()->user()->isDelivery())
         <details class="panel mt-6 p-5">
             <summary class="cursor-pointer select-none text-sm font-medium text-ink">{{ __('Write a review') }}</summary>
             <form method="POST" action="{{ route('reviews.store') }}" enctype="multipart/form-data" class="mt-4 space-y-4">

@@ -74,7 +74,7 @@
                     <p class="font-mono text-xl font-medium text-accent">${{ number_format($contactLens->price, 2) }}<span class="text-sm text-ink-faint">/box</span></p>
                 </div>
 
-                @if (auth()->check() && auth()->user()->isAdmin())
+                @if (auth()->check() && auth()->user()->canAccessAdminConsole())
                     <p class="panel mt-6 px-4 py-3 text-xs text-ink-soft">{{ __('Staff preview — ordering is disabled for admin accounts.') }}</p>
                 @else
                     <button type="submit" class="btn-accent w-full">{{ __('Add to cart') }}</button>

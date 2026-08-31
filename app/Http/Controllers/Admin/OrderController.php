@@ -34,7 +34,11 @@ class OrderController extends Controller
             ->paginate(25)
             ->withQueryString();
 
-        return view('admin.orders.index', ['orders' => $orders, 'statuses' => self::STATUSES]);
+        return view('admin.orders.index', [
+            'orders' => $orders,
+            'statuses' => self::STATUSES,
+            'orderRoutes' => $this->orderRoutesFor($request->user()),
+        ]);
     }
 
     public function show(Request $request, Order $order): View
@@ -49,6 +53,7 @@ class OrderController extends Controller
             'order' => $order,
             'statuses' => $this->statusesFor($request->user()),
             'deliveryUsers' => User::whereIn('role', ['delivery'])->orderBy('first_name')->get(),
+            'orderRoutes' => $this->orderRoutesFor($request->user()),
         ]);
     }
 
@@ -215,5 +220,25 @@ class OrderController extends Controller
         }
 
         return [];
+    }
+
+    /**
+     * @return array{index: string, show: string, status: string}
+     */
+    private function orderRoutesFor(?User $user): array
+    {
+        if ($user?->isDelivery()) {
+            return [
+                'index' => 'delivery.orders.index',
+                'show' => 'delivery.orders.show',
+                'status' => 'delivery.orders.status',
+            ];
+        }
+
+        return [
+            'index' => 'admin.orders.index',
+            'show' => 'admin.orders.show',
+            'status' => 'admin.orders.status',
+        ];
     }
 }

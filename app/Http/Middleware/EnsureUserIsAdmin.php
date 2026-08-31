@@ -15,7 +15,7 @@ class EnsureUserIsAdmin
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (! $request->user() || ! $request->user()->isEmployee()) {
+        if (! $request->user() || ! $request->user()->canAccessAdminConsole()) {
             abort(403, 'This area is for shop staff only.');
         }
 

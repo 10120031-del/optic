@@ -18,7 +18,7 @@
         invalid HTML. It also reads as what it is — a one-way door, distinct
         from the everyday Save button at the bottom.
     --}}
-    @if ($collection->exists)
+    @if ($collection->exists && auth()->user()?->isOwner())
         <section class="tick-frame relative mb-10 border border-hairline bg-wash p-6">
             @if ($collection->isAnnounced())
                 <div class="flex flex-wrap items-center justify-between gap-4">

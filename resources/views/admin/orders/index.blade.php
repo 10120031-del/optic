@@ -1,5 +1,5 @@
 <x-admin-layout title="Orders" heading="Orders">
-    <form method="GET" action="{{ route('admin.orders.index') }}" class="mb-6 flex flex-wrap items-center gap-3">
+    <form method="GET" action="{{ route($orderRoutes['index']) }}" class="mb-6 flex flex-wrap items-center gap-3">
         <input type="text" name="q" value="{{ request('q') }}" placeholder="{{ __('Order number…') }}" class="input max-w-xs">
         <select name="status" class="select max-w-xs" onchange="this.form.submit()">
             <option value="">{{ __('All statuses') }}</option>
@@ -33,7 +33,7 @@
                             <td>{{ $order->created_at->format('M j, Y') }}</td>
                             <td><x-status-badge :status="$order->status" /></td>
                             <td class="text-right font-mono text-ink">${{ number_format($order->total, 2) }}</td>
-                            <td class="text-right"><a href="{{ route('admin.orders.show', $order) }}" class="text-xs text-ink underline hover:no-underline">{{ __('View') }}</a></td>
+                            <td class="text-right"><a href="{{ route($orderRoutes['show'], $order) }}" class="text-xs text-ink underline hover:no-underline">{{ __('View') }}</a></td>
                         </tr>
                     @endforeach
                 </tbody>

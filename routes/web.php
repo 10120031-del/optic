@@ -162,7 +162,9 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     // it is the one action here that mails customers, so it never sits
     // behind a GET a crawler or a refresh could replay.
     Route::resource('collections', AdminCollectionController::class)->except(['show']);
-    Route::post('/collections/{collection}/announce', [AdminCollectionController::class, 'announce'])->name('collections.announce');
+    Route::middleware('owner')->group(function () {
+        Route::post('/collections/{collection}/announce', [AdminCollectionController::class, 'announce'])->name('collections.announce');
+    });
 
     Route::resource('contact-lenses', AdminContactLensController::class)
         ->except(['show'])
@@ -185,8 +187,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::patch('/reviews/{review}/approve', [AdminReviewController::class, 'approve'])->name('reviews.approve');
     Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])->name('reviews.destroy');
 
-    Route::get('/promotions', [PromotionCampaignController::class, 'index'])->name('promotions.index');
-    Route::get('/promotions/create', [PromotionCampaignController::class, 'create'])->name('promotions.create');
-    Route::post('/promotions', [PromotionCampaignController::class, 'store'])->name('promotions.store');
-    Route::get('/promotions/{promotion}', [PromotionCampaignController::class, 'show'])->name('promotions.show');
+    Route::middleware('owner')->group(function () {
+        Route::get('/promotions', [PromotionCampaignController::class, 'index'])->name('promotions.index');
+        Route::get('/promotions/create', [PromotionCampaignController::class, 'create'])->name('promotions.create');
+        Route::post('/promotions', [PromotionCampaignController::class, 'store'])->name('promotions.store');
+        Route::get('/promotions/{promotion}', [PromotionCampaignController::class, 'show'])->name('promotions.show');
+    });
 });
