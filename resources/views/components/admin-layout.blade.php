@@ -12,6 +12,7 @@
         ['label' => __('Lens Packages'), 'route' => 'admin.lenses.index', 'pattern' => 'admin.lenses.*'],
         ['label' => __('Lens Features'), 'route' => 'admin.lens-features.index', 'pattern' => 'admin.lens-features.*'],
         ['label' => __('Contact Lenses'), 'route' => 'admin.contact-lenses.index', 'pattern' => 'admin.contact-lenses.*'],
+        ['label' => __('Collections'), 'route' => 'admin.collections.index', 'pattern' => 'admin.collections.*'],
         ['label' => __('Orders'), 'route' => 'admin.orders.index', 'pattern' => 'admin.orders.*', 'badge' => $pendingOrdersCount ?? 0],
         ['label' => __('Returns'), 'route' => 'admin.returns.index', 'pattern' => 'admin.returns.*'],
         ['label' => __('Prescriptions'), 'route' => 'admin.prescriptions.index', 'pattern' => 'admin.prescriptions.*'],

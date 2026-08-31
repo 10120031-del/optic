@@ -65,11 +65,11 @@ class CreateAdminUser extends Command
             'last_name' => $lastName,
             'email' => $email,
             'password' => Hash::make($password),
-            'role' => 'admin',
+            'role' => 'owner',
             'email_verified_at' => now(),
         ]);
 
-        $this->components->info("Admin account created for {$email}.");
+        $this->components->info("Owner account created for {$email}.");
 
         return self::SUCCESS;
     }
@@ -81,18 +81,18 @@ class CreateAdminUser extends Command
      */
     private function promote(User $user): int
     {
-        if ($user->isAdmin()) {
-            $this->components->warn("{$user->email} is already an admin.");
+        if ($user->isOwner()) {
+            $this->components->warn("{$user->email} is already an owner.");
 
             return self::SUCCESS;
         }
 
-        if (! $this->confirm("{$user->email} already exists as a customer. Promote it to admin?", true)) {
+        if (! $this->confirm("{$user->email} already exists as a customer. Promote it to owner?", true)) {
             return self::FAILURE;
         }
 
-        $user->update(['role' => 'admin']);
-        $this->components->info("{$user->email} promoted to admin.");
+        $user->update(['role' => 'owner']);
+        $this->components->info("{$user->email} promoted to owner.");
 
         return self::SUCCESS;
     }

@@ -11,6 +11,9 @@
                 <p class="eyebrow">{{ __('Customer') }}</p>
                 <p class="mt-1 text-sm text-ink">{{ $order->user->first_name }} {{ $order->user->last_name }}</p>
                 <p class="text-xs text-ink-faint">{{ $order->user->email }}</p>
+                @if ($order->user->phone_number)
+                    <p class="mt-2 text-xs text-ink-faint">{{ __('Phone') }}: {{ $order->user->phone_number }}</p>
+                @endif
             </div>
 
             <section>
@@ -115,9 +118,25 @@
                 <p>{{ $order->shipping_country }}</p>
             </div>
 
+            @if (auth()->user()?->isOwner() || auth()->user()?->isStaff())
+                <div class="panel p-6">
+                    <p class="eyebrow mb-4">{{ __('Assign delivery') }}</p>
+                    <form method="POST" action="{{ route('admin.orders.assign-delivery', $order) }}" class="space-y-3">
+                        @csrf @method('PATCH')
+                        <select name="assigned_delivery_user_id" class="select">
+                            <option value="">{{ __('Unassigned') }}</option>
+                            @foreach ($deliveryUsers as $deliveryUser)
+                                <option value="{{ $deliveryUser->id }}" @selected($order->assigned_delivery_user_id === $deliveryUser->id)>{{ $deliveryUser->first_name }} {{ $deliveryUser->last_name }}</option>
+                            @endforeach
+                        </select>
+                        <button type="submit" class="btn-outline btn-sm w-full">{{ __('Save delivery') }}</button>
+                    </form>
+                </div>
+            @endif
+
             <div class="panel p-6">
                 <p class="eyebrow mb-4">{{ __('Update status') }}</p>
-                <form method="POST" action="{{ route('admin.orders.status', $order) }}" class="space-y-3">
+                <form method="POST" action="{{ route(auth()->user()?->isDelivery() ? 'delivery.orders.status' : 'admin.orders.status', $order) }}" class="space-y-3">
                     @csrf @method('PATCH')
                     <select name="status" class="select">
                         @foreach ($statuses as $status)

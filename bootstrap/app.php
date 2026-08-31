@@ -2,6 +2,9 @@
 
 use App\Http\Middleware\EnsureUserIsAdmin;
 use App\Http\Middleware\EnsureUserIsCustomer;
+use App\Http\Middleware\EnsureUserIsDelivery;
+use App\Http\Middleware\EnsureUserIsOwner;
+use App\Http\Middleware\EnsureUserIsStaff;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -15,6 +18,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'admin' => EnsureUserIsAdmin::class,
+            'owner' => EnsureUserIsOwner::class,
+            'staff' => EnsureUserIsStaff::class,
+            'delivery' => EnsureUserIsDelivery::class,
             'customer' => EnsureUserIsCustomer::class,
         ]);
 

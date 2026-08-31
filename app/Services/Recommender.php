@@ -7,6 +7,7 @@ use App\Models\Frame;
 use App\Models\Order;
 use App\Models\OrderContactLens;
 use App\Models\OrderEyeglass;
+use App\Models\ProductEmbedding;
 use App\Models\ProductView;
 use App\Models\User;
 use Closure;
@@ -19,28 +20,31 @@ use Illuminate\Support\Facades\DB;
 /**
  * Product recommendations for frames and contact lenses.
  *
- * Three signals, blended, none of which needed a new table — the catalog
- * columns, the order lines and the product_views log the shop already keeps
- * are the whole input:
+ * A hybrid recommender over two kinds of evidence:
  *
- *   1. Content similarity. Every catalog attribute a shopper actually chooses
- *      on (a frame's outline shape and what it's for, a lens's replacement
- *      schedule and base curve) scored as a weighted match against the item
- *      in front of them. This is the part that works on day one, with an
- *      empty orders table and no traffic.
- *   2. Co-view. People who looked at this also looked at that, from
- *      product_views. Picks up taste the attribute columns can't name — the
- *      reason two unrelated-on-paper frames keep getting compared.
- *   3. Co-purchase. Customers who bought this also bought that, measured
- *      across a customer's whole history rather than within one order,
- *      because nobody buys two pairs of glasses in a single checkout.
- *      Deliberately cross-catalog: buying a frame is the best predictor
- *      there is that someone also wants contact lenses.
+ *   SEMANTIC — where a product sits in the vector space of the
+ *   all-MiniLM-L6-v2 sentence transformer. App\Services\CatalogEmbedder
+ *   writes a paragraph describing each product and stores the model's
+ *   384-dimensional embedding of it; similarity here is the cosine between
+ *   two of those vectors. This is what "similar" means now, and it needs no
+ *   sales history at all, which is what makes the shop useful on day one.
  *
- * Both collaborative signals are damped by the candidate's own popularity
- * (divided by the square root of its total audience), so the shop's
- * best-seller doesn't end up recommended underneath every product in the
- * catalog — the classic failure mode of a raw co-occurrence count.
+ *   BEHAVIOURAL — what people actually did, from the tables the shop
+ *   already keeps. Co-view (people who opened this also opened that, from
+ *   product_views) and co-purchase (customers who bought this also bought
+ *   that, from the order lines). The model cannot know these: no amount of
+ *   reading a product description reveals that buyers of a frame come back
+ *   for contact lenses a month later.
+ *
+ * The two are complementary and both are needed. Semantics without
+ * behaviour recommends things that merely read alike; behaviour without
+ * semantics recommends nothing until the shop has traffic.
+ *
+ * Vectors are stored L2-normalized, so every cosine below is a plain dot
+ * product. Both collaborative signals are damped by the candidate's own
+ * popularity — divided by the square root of its total audience — so the
+ * shop's best-seller does not end up recommended under every product in the
+ * catalog, the classic failure mode of a raw co-occurrence count.
  *
  * Rankings are cached as id => score maps, never as models, so a cached
  * ranking still gets re-checked against live stock when it is hydrated.
@@ -49,7 +53,7 @@ use Illuminate\Support\Facades\DB;
 class Recommender
 {
     /** Bump to invalidate every cached ranking after a scoring change. */
-    private const CACHE_VERSION = 'v1';
+    private const CACHE_VERSION = 'v2';
 
     private const CACHE_TTL = 1800;
 
@@ -59,21 +63,35 @@ class Recommender
     /** Orders that never completed shouldn't shape anyone's recommendations. */
     private const DEAD_ORDER_STATUSES = ['cancelled', 'refunded'];
 
-    /** How many content-scored rows to rank before blending in co-views. */
-    private const CANDIDATE_POOL = 60;
+    /**
+     * Cosine floor for calling two products related.
+     *
+     * Measured, not guessed: across this catalog the pairwise cosines run
+     * 0.21 to 0.88 with a median of 0.40, and the bottom quartile sits below
+     * 0.35. Products share so much vocabulary ("frame", "lenses", "mm",
+     * a price) that nothing ever scores near zero, so the floor has to sit
+     * well above it. 0.30 clears the genuinely unrelated tail without
+     * cutting into real matches.
+     */
+    private const MIN_COSINE = 0.30;
+
+    /** Points a perfect semantic match is worth, before behavioural lift. */
+    private const SEMANTIC_WEIGHT = 10.0;
+
+    /** Most the co-view signal can add on top of a semantic score. */
+    private const CO_VIEW_WEIGHT = 4.0;
 
     /**
-     * Floor for "you may also like" on pure attribute matching, out of a
-     * possible 18.5 for frames and 16 for lenses — roughly two solid
-     * matches. Below this the catalog holds nothing genuinely similar, and
-     * an empty rail beats one padded with filler.
+     * Floor for the attribute fallback, out of a possible 18.5 for frames
+     * and 16 for lenses — roughly two solid matches. Only reached for
+     * products with no stored vector.
      */
     private const MIN_FRAME_SCORE = 4.5;
 
     private const MIN_LENS_SCORE = 5.0;
 
-    /** Most the co-view signal can add on top of a content score. */
-    private const CO_VIEW_WEIGHT = 4.0;
+    /** How many attribute-scored rows to rank when falling back. */
+    private const CANDIDATE_POOL = 60;
 
     /*
     |--------------------------------------------------------------------------
@@ -83,7 +101,7 @@ class Recommender
 
     /**
      * "You may also like" — the same catalog as the product being viewed,
-     * ranked by attribute similarity and lifted by what co-viewers opened.
+     * ranked by semantic similarity and lifted by what co-viewers opened.
      *
      * @return Collection<int, Frame|ContactLens>
      */
@@ -98,7 +116,7 @@ class Recommender
      *
      * Returns nothing until the shop has real co-purchase history. That is
      * deliberate: the heading makes a factual claim about other customers,
-     * so it must never be filled in with attribute lookalikes.
+     * so it must never be filled in with lookalikes.
      *
      * @return Collection<int, Frame|ContactLens>
      */
@@ -108,8 +126,39 @@ class Recommender
     }
 
     /**
-     * "Recommended for you" — a blend over everything the shopper has bought
-     * and browsed. Purchases outrank views, recent views outrank older ones.
+     * The two rails a product page carries, de-duplicated against each other
+     * so the same product never appears in both.
+     *
+     * "Customers also bought" wins any overlap: it is the stronger claim,
+     * and the only one that can be filled from real history.
+     *
+     * @return array{similar: Collection<int, Frame|ContactLens>, alsoBought: Collection<int, Frame|ContactLens>}
+     */
+    public function forProductPage(Frame|ContactLens $product, int $limit = 4): array
+    {
+        $alsoBought = $this->alsoBought($product, $limit);
+
+        $similar = $this->similarTo($product, $limit + $alsoBought->count())
+            ->reject(fn (Model $candidate) => $alsoBought->contains(fn (Model $bought) => $bought->is($candidate)))
+            ->take($limit)
+            ->values();
+
+        return ['similar' => $similar, 'alsoBought' => $alsoBought];
+    }
+
+    /**
+     * "Recommended for you".
+     *
+     * Everything the shopper has bought and browsed is averaged into a
+     * single taste vector — one point in the same space the products live
+     * in, weighted so purchases count for more than views and recent views
+     * for more than old ones — and the catalog is then ranked by distance
+     * from that point.
+     *
+     * This is why the rail can cross catalogs coherently: a taste vector
+     * built from three frames still has a well-defined distance to every
+     * contact lens, so the shopper gets the lenses that suit the way they
+     * dress their face, not just the best-selling box.
      *
      * Works for guests too: an unauthenticated shopper's product_views rows
      * are keyed by session id, which is enough to personalize a first visit.
@@ -124,18 +173,12 @@ class Recommender
             return collect();
         }
 
-        $scores = [];
+        $scores = $this->tasteScores($seeds);
 
         foreach ($seeds as $seed) {
-            $product = $seed['product'];
-            $weight = $seed['weight'];
-
-            $this->accumulate($scores, $this->similarScores($product), $weight);
-
-            // Co-purchase is the stronger evidence wherever it exists, and the
-            // only signal that can carry a frame buyer across to the
-            // contact-lens catalog.
-            $this->accumulate($scores, $this->coPurchaseScores($product), $weight * 1.5);
+            // Co-purchase is the only signal that knows a frame buyer tends
+            // to come back for lenses, so it gets a say alongside taste.
+            $this->accumulate($scores, $this->coPurchaseScores($seed['product']), $seed['weight'] * 1.5);
         }
 
         $exclude = array_merge(
@@ -144,27 +187,6 @@ class Recommender
         );
 
         return $this->hydrate($scores, $limit, $exclude);
-    }
-
-    /**
-     * The two rails a product page carries, de-duplicated against each other
-     * so the same frame never appears in both.
-     *
-     * "Customers also bought" wins any overlap: it is the stronger claim, and
-     * it is the one that can only be filled from real history.
-     *
-     * @return array{similar: Collection<int, Frame|ContactLens>, alsoBought: Collection<int, Frame|ContactLens>}
-     */
-    public function forProductPage(Frame|ContactLens $product, int $limit = 4): array
-    {
-        $alsoBought = $this->alsoBought($product, $limit);
-
-        $similar = $this->similarTo($product, $limit + $alsoBought->count())
-            ->reject(fn (Model $candidate) => $alsoBought->contains(fn (Model $bought) => $bought->is($candidate)))
-            ->take($limit)
-            ->values();
-
-        return ['similar' => $similar, 'alsoBought' => $alsoBought];
     }
 
     /**
@@ -187,11 +209,11 @@ class Recommender
             return null;
         }
 
-        $scores = [];
+        $seeds = $bought->map(fn (Frame|ContactLens $p) => ['product' => $p, 'weight' => 1.0]);
+        $scores = $this->tasteScores($seeds);
 
         foreach ($bought as $product) {
             $this->accumulate($scores, $this->coPurchaseScores($product), 1.5);
-            $this->accumulate($scores, $this->similarScores($product), 1.0);
         }
 
         $products = $this->hydrate($scores, $limit, $this->purchasedKeys($order->user));
@@ -200,21 +222,26 @@ class Recommender
     }
 
     /**
-     * "Goes well with your cart" — seeded by what is in the cart right now
-     * and excluding it, so the rail never suggests something already added.
+     * "Goes well with your cart" — the taste vector of what is in the cart
+     * right now, excluding the cart itself.
      *
      * @param  Collection<int, Frame|ContactLens>  $inCart
      * @return Collection<int, Frame|ContactLens>
      */
     public function toCompleteCart(Collection $inCart, int $limit = 4): Collection
     {
-        $scores = [];
+        if ($inCart->isEmpty()) {
+            return collect();
+        }
+
+        $seeds = $inCart->map(fn (Frame|ContactLens $p) => ['product' => $p, 'weight' => 1.0]);
+
+        // Weighted towards co-purchase: someone with a frame in the cart
+        // wants the things that go with it, not four more frames.
+        $scores = $this->tasteScores($seeds, 0.6);
 
         foreach ($inCart as $product) {
-            // Weighted towards co-purchase: someone with a frame in the cart
-            // wants the things that go with it, not four more frames.
             $this->accumulate($scores, $this->coPurchaseScores($product), 1.5);
-            $this->accumulate($scores, $this->similarScores($product), 0.6);
         }
 
         return $this->hydrate($scores, $limit, $inCart->map(fn (Model $p) => $this->key($p))->all());
@@ -222,12 +249,15 @@ class Recommender
 
     /*
     |--------------------------------------------------------------------------
-    | Scoring — cached id => score maps
+    | Semantic similarity
     |--------------------------------------------------------------------------
     */
 
     /**
-     * Content similarity lifted by co-view, within the product's own catalog.
+     * Semantic similarity lifted by co-view, within the product's own
+     * catalog. Falls back to attribute scoring when the product has no
+     * stored vector — a brand-new product, or an install where
+     * `php artisan catalog:embed` has not run yet.
      *
      * @return array<string, float>
      */
@@ -238,44 +268,331 @@ class Recommender
             self::CACHE_TTL,
             function () use ($product) {
                 $coView = $this->normalize($this->coViewCounts($product));
+                $semantic = $this->semanticScores($product);
 
-                $query = $product instanceof Frame
-                    ? $this->frameScoreQuery($product)
-                    : $this->contactLensScoreQuery($product);
-
-                $candidates = (clone $query)
-                    ->orderByDesc('match_score')
-                    ->limit(self::CANDIDATE_POOL)
-                    ->get();
-
-                // A heavily co-viewed product earns its place even if it fell
-                // outside the content pool, so pull in whatever the pool missed.
-                $missing = array_diff(array_keys($coView), $candidates->modelKeys());
-
-                if ($missing !== []) {
-                    $candidates = $candidates->merge((clone $query)->whereKey($missing)->get());
+                if ($semantic === []) {
+                    return $this->attributeScores($product, $coView);
                 }
 
-                $floor = $product instanceof Frame ? self::MIN_FRAME_SCORE : self::MIN_LENS_SCORE;
                 $scores = [];
 
-                foreach ($candidates as $candidate) {
-                    $content = (float) $candidate->match_score;
-                    $lift = ($coView[$candidate->getKey()] ?? 0.0) * self::CO_VIEW_WEIGHT;
+                foreach ($semantic as $key => $points) {
+                    [$class, $id] = explode(':', $key);
 
-                    // Either a real attribute match, or hard evidence that
-                    // shoppers compare the two. Neither one alone is filler.
-                    if ($content < $floor && $lift <= 0.0) {
+                    // Same catalog only: "you may also like" sits under a
+                    // product, where a box of lenses is not an alternative
+                    // to a frame. Crossing catalogs is the job of the
+                    // co-purchase rail and the personalized one.
+                    if ($class !== $product->getMorphClass()) {
                         continue;
                     }
 
-                    $scores[$this->key($candidate)] = $content + $lift;
+                    $scores[$key] = $points + ($coView[(int) $id] ?? 0.0) * self::CO_VIEW_WEIGHT;
+                }
+
+                // A heavily co-viewed product earns its place even if the
+                // model put it below the floor — people comparing two
+                // products is evidence the text could not supply.
+                foreach ($coView as $id => $lift) {
+                    $key = $product->getMorphClass().':'.$id;
+                    $scores[$key] ??= $lift * self::CO_VIEW_WEIGHT;
                 }
 
                 return $scores;
             }
         );
     }
+
+    /**
+     * Cosine of the seed against every other embedded product, rescaled to
+     * points.
+     *
+     * The rescale is anchored at MIN_COSINE rather than at the weakest
+     * candidate, so the points mean the same thing for a tight cluster and
+     * a loose one. Contact-lens descriptions share far more vocabulary than
+     * frame descriptions and sit at systematically higher cosines; min-max
+     * over the candidates alone would quietly award a lens rail full marks
+     * for what is really an average match.
+     *
+     * @return array<string, float>
+     */
+    private function semanticScores(Frame|ContactLens $product): array
+    {
+        $matrix = $this->embeddingMatrix();
+        $seed = $matrix[$this->key($product)] ?? null;
+
+        if ($seed === null) {
+            return [];
+        }
+
+        $cosines = [];
+
+        foreach ($matrix as $key => $vector) {
+            if ($key === $this->key($product)) {
+                continue;
+            }
+
+            $cosine = $this->dot($seed, $vector);
+
+            if ($cosine >= self::MIN_COSINE) {
+                $cosines[$key] = $cosine;
+            }
+        }
+
+        return $this->toPoints($cosines);
+    }
+
+    /**
+     * Rank the whole catalog against a shopper's taste vector.
+     *
+     * @param  Collection<int, array{product: Frame|ContactLens, weight: float}>  $seeds
+     * @return array<string, float>
+     */
+    private function tasteScores(Collection $seeds, float $weight = 1.0): array
+    {
+        $taste = $this->tasteVector($seeds);
+
+        if ($taste === null) {
+            // No vectors anywhere — fall back to per-seed attribute scoring.
+            $scores = [];
+
+            foreach ($seeds as $seed) {
+                $this->accumulate($scores, $this->similarScores($seed['product']), $seed['weight'] * $weight);
+            }
+
+            return $scores;
+        }
+
+        $cosines = [];
+
+        foreach ($this->embeddingMatrix() as $key => $vector) {
+            $cosine = $this->dot($taste, $vector);
+
+            if ($cosine >= self::MIN_COSINE) {
+                $cosines[$key] = $cosine;
+            }
+        }
+
+        return array_map(fn (float $points) => $points * $weight, $this->toPoints($cosines));
+    }
+
+    /**
+     * The weighted centroid of the seeds' vectors, re-normalized to unit
+     * length so its dot products stay true cosines.
+     *
+     * Averaging embeddings is a crude summary of a person — someone buying
+     * for themselves and for a child lands between the two — but it is the
+     * standard one, and with a handful of seeds it holds up.
+     *
+     * @param  Collection<int, array{product: Frame|ContactLens, weight: float}>  $seeds
+     * @return array<int, float>|null
+     */
+    private function tasteVector(Collection $seeds): ?array
+    {
+        $matrix = $this->embeddingMatrix();
+        $sum = null;
+        $total = 0.0;
+
+        foreach ($seeds as $seed) {
+            $vector = $matrix[$this->key($seed['product'])] ?? null;
+
+            if ($vector === null) {
+                continue;
+            }
+
+            $weight = (float) $seed['weight'];
+            $total += $weight;
+
+            if ($sum === null) {
+                $sum = array_fill(0, count($vector), 0.0);
+            }
+
+            foreach ($vector as $i => $value) {
+                $sum[$i] += $value * $weight;
+            }
+        }
+
+        if ($sum === null || $total <= 0.0) {
+            return null;
+        }
+
+        $length = sqrt(array_sum(array_map(fn (float $v) => $v * $v, $sum)));
+
+        if ($length <= 1e-9) {
+            return null;
+        }
+
+        return array_map(fn (float $v) => $v / $length, $sum);
+    }
+
+    /**
+     * Every stored vector, keyed by "Class:id".
+     *
+     * Loaded once and cached: at catalog scale this is a few hundred
+     * kilobytes and turns every similarity into arithmetic on an array
+     * rather than a query. A catalog large enough for this to hurt (call it
+     * six figures) is the point where the vectors belong in a dedicated
+     * index instead, not the point where this file grows a query planner.
+     *
+     * @return array<string, array<int, float>>
+     */
+    private function embeddingMatrix(): array
+    {
+        return Cache::remember(CatalogEmbedder::CACHE_KEY, self::CACHE_TTL, function () {
+            $matrix = [];
+
+            foreach (ProductEmbedding::where('model', CatalogEmbedder::MODEL)->cursor() as $row) {
+                $matrix[$row->embeddable_type.':'.$row->embeddable_id] = $row->toVector();
+            }
+
+            return $matrix;
+        });
+    }
+
+    /**
+     * Rescale cosines above the floor onto a 0..SEMANTIC_WEIGHT scale.
+     *
+     * @param  array<string, float>  $cosines
+     * @return array<string, float>
+     */
+    private function toPoints(array $cosines): array
+    {
+        if ($cosines === []) {
+            return [];
+        }
+
+        $ceiling = max(max($cosines), self::MIN_COSINE + 0.05);
+        $span = $ceiling - self::MIN_COSINE;
+
+        return array_map(
+            fn (float $cosine) => (($cosine - self::MIN_COSINE) / $span) * self::SEMANTIC_WEIGHT,
+            $cosines,
+        );
+    }
+
+    /** Cosine similarity, given both vectors are stored unit length. */
+    private function dot(array $a, array $b): float
+    {
+        $sum = 0.0;
+
+        foreach ($a as $i => $value) {
+            $sum += $value * ($b[$i] ?? 0.0);
+        }
+
+        return $sum;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Attribute fallback
+    |--------------------------------------------------------------------------
+    |
+    | Used only for products with no stored vector. Keeping it means a fresh
+    | clone that has not run `catalog:embed` — or a frame added through the
+    | admin area an hour ago — still gets recommendations, just from the
+    | cheaper signal.
+    |
+    */
+
+    /**
+     * @param  array<int, float>  $coView
+     * @return array<string, float>
+     */
+    private function attributeScores(Frame|ContactLens $product, array $coView): array
+    {
+        $query = $product instanceof Frame
+            ? $this->frameScoreQuery($product)
+            : $this->contactLensScoreQuery($product);
+
+        $candidates = (clone $query)
+            ->orderByDesc('match_score')
+            ->limit(self::CANDIDATE_POOL)
+            ->get();
+
+        $missing = array_diff(array_keys($coView), $candidates->modelKeys());
+
+        if ($missing !== []) {
+            $candidates = $candidates->merge((clone $query)->whereKey($missing)->get());
+        }
+
+        $floor = $product instanceof Frame ? self::MIN_FRAME_SCORE : self::MIN_LENS_SCORE;
+        $scores = [];
+
+        foreach ($candidates as $candidate) {
+            $content = (float) $candidate->match_score;
+            $lift = ($coView[$candidate->getKey()] ?? 0.0) * self::CO_VIEW_WEIGHT;
+
+            if ($content < $floor && $lift <= 0.0) {
+                continue;
+            }
+
+            $scores[$this->key($candidate)] = $content + $lift;
+        }
+
+        return $scores;
+    }
+
+    private function frameScoreQuery(Frame $seed): Builder
+    {
+        $price = (float) $seed->price;
+        $band = max($price * 0.5, 30.0);
+
+        $expression = implode(' + ', [
+            '(CASE WHEN shape = ? THEN 3 ELSE 0 END)',
+            '(CASE WHEN category = ? THEN 3 ELSE 0 END)',
+            '(CASE WHEN type = ? THEN 2 ELSE 0 END)',
+            '(CASE WHEN material = ? THEN 2 ELSE 0 END)',
+            "(CASE WHEN gender = ? THEN 2 WHEN gender = 'unisex' OR ? = 'unisex' THEN 1 ELSE 0 END)",
+            '(CASE WHEN brand = ? THEN 1.5 ELSE 0 END)',
+            '(CASE WHEN size = ? THEN 1.5 ELSE 0 END)',
+            '(CASE WHEN color = ? THEN 1 ELSE 0 END)',
+            '(CASE WHEN ABS(price - ?) < ? THEN 2.5 * (1 - ABS(price - ?) / ?) ELSE 0 END)',
+        ]);
+
+        return Frame::query()
+            ->selectRaw("frames.*, ({$expression}) as match_score", [
+                $seed->shape, $seed->category, $seed->type, $seed->material,
+                $seed->gender, $seed->gender, $seed->brand, $seed->size, $seed->color,
+                $price, $band, $price, $band,
+            ])
+            ->where('is_active', true)
+            ->where('stock', '>', 0)
+            ->whereKeyNot($seed->getKey());
+    }
+
+    private function contactLensScoreQuery(ContactLens $seed): Builder
+    {
+        $unitPrice = '(price / (CASE WHEN pack_size > 0 THEN pack_size ELSE 1 END))';
+        $seedUnit = (float) $seed->price / max(1, (int) $seed->pack_size);
+        $band = max($seedUnit * 0.5, 1.0);
+
+        $expression = implode(' + ', [
+            '(CASE WHEN brand = ? THEN 3 ELSE 0 END)',
+            '(CASE WHEN type = ? THEN 3 ELSE 0 END)',
+            '(CASE WHEN material = ? THEN 2 ELSE 0 END)',
+            '(CASE WHEN ABS(base_curve - ?) <= 0.2 THEN 2 ELSE 0 END)',
+            '(CASE WHEN ABS(diameter - ?) <= 0.3 THEN 1.5 ELSE 0 END)',
+            '(CASE WHEN color = ? THEN 1.5 WHEN color IS NULL AND ? IS NULL THEN 1 ELSE 0 END)',
+            '(CASE WHEN pack_size = ? THEN 1 ELSE 0 END)',
+            "(CASE WHEN ABS({$unitPrice} - ?) < ? THEN 2 * (1 - ABS({$unitPrice} - ?) / ?) ELSE 0 END)",
+        ]);
+
+        return ContactLens::query()
+            ->selectRaw("contact_lenses.*, ({$expression}) as match_score", [
+                $seed->brand, $seed->type, $seed->material, $seed->base_curve,
+                $seed->diameter, $seed->color, $seed->color, $seed->pack_size,
+                $seedUnit, $band, $seedUnit, $band,
+            ])
+            ->where('is_active', true)
+            ->where('stock', '>', 0)
+            ->whereKeyNot($seed->getKey());
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Behavioural signals
+    |--------------------------------------------------------------------------
+    */
 
     /**
      * Customers who bought this also bought — across both catalogs.
@@ -291,110 +608,6 @@ class Recommender
                 + $this->dampen(ContactLens::class, $this->coPurchasedContactLenses($product))
         );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Content similarity
-    |--------------------------------------------------------------------------
-    */
-
-    /**
-     * Frames scored against a seed frame, weighted by how much each attribute
-     * actually drives the choice: outline shape and what the frame is *for*
-     * dominate, brand and colour are tie-breakers, and price proximity keeps
-     * the rail inside the budget the shopper has already shown us.
-     *
-     * A null attribute on either side simply scores zero — `col = NULL` is
-     * never true — so partly-filled catalog rows degrade instead of breaking.
-     */
-    private function frameScoreQuery(Frame $seed): Builder
-    {
-        $price = (float) $seed->price;
-
-        // Half the seed's price, floored at $30, so the band stays meaningful
-        // for a budget frame without swallowing the catalog for a premium one.
-        $band = max($price * 0.5, 30.0);
-
-        $expression = implode(' + ', [
-            "(CASE WHEN shape = ? THEN 3 ELSE 0 END)",
-            "(CASE WHEN category = ? THEN 3 ELSE 0 END)",
-            "(CASE WHEN type = ? THEN 2 ELSE 0 END)",
-            "(CASE WHEN material = ? THEN 2 ELSE 0 END)",
-            "(CASE WHEN gender = ? THEN 2 WHEN gender = 'unisex' OR ? = 'unisex' THEN 1 ELSE 0 END)",
-            "(CASE WHEN brand = ? THEN 1.5 ELSE 0 END)",
-            "(CASE WHEN size = ? THEN 1.5 ELSE 0 END)",
-            "(CASE WHEN color = ? THEN 1 ELSE 0 END)",
-            "(CASE WHEN ABS(price - ?) < ? THEN 2.5 * (1 - ABS(price - ?) / ?) ELSE 0 END)",
-        ]);
-
-        return Frame::query()
-            ->selectRaw("frames.*, ({$expression}) as match_score", [
-                $seed->shape,
-                $seed->category,
-                $seed->type,
-                $seed->material,
-                $seed->gender,
-                $seed->gender,
-                $seed->brand,
-                $seed->size,
-                $seed->color,
-                $price, $band, $price, $band,
-            ])
-            ->where('is_active', true)
-            ->where('stock', '>', 0)
-            ->whereKeyNot($seed->getKey());
-    }
-
-    /**
-     * Contact lenses scored against a seed lens. Replacement schedule and
-     * brand carry the most weight because that is how wearers shop, and base
-     * curve / diameter are scored as tolerances rather than exact matches —
-     * they are fit measurements, not labels.
-     */
-    private function contactLensScoreQuery(ContactLens $seed): Builder
-    {
-        // Boxes come in wildly different pack sizes, so compare what a wearer
-        // pays per lens rather than per box.
-        $unitPrice = '(price / (CASE WHEN pack_size > 0 THEN pack_size ELSE 1 END))';
-
-        $seedUnit = (float) $seed->price / max(1, (int) $seed->pack_size);
-        $band = max($seedUnit * 0.5, 1.0);
-
-        $expression = implode(' + ', [
-            "(CASE WHEN brand = ? THEN 3 ELSE 0 END)",
-            "(CASE WHEN type = ? THEN 3 ELSE 0 END)",
-            "(CASE WHEN material = ? THEN 2 ELSE 0 END)",
-            "(CASE WHEN ABS(base_curve - ?) <= 0.2 THEN 2 ELSE 0 END)",
-            "(CASE WHEN ABS(diameter - ?) <= 0.3 THEN 1.5 ELSE 0 END)",
-            // Two clear lenses match each other; two coloured lenses only
-            // match on the same colour.
-            "(CASE WHEN color = ? THEN 1.5 WHEN color IS NULL AND ? IS NULL THEN 1 ELSE 0 END)",
-            "(CASE WHEN pack_size = ? THEN 1 ELSE 0 END)",
-            "(CASE WHEN ABS({$unitPrice} - ?) < ? THEN 2 * (1 - ABS({$unitPrice} - ?) / ?) ELSE 0 END)",
-        ]);
-
-        return ContactLens::query()
-            ->selectRaw("contact_lenses.*, ({$expression}) as match_score", [
-                $seed->brand,
-                $seed->type,
-                $seed->material,
-                $seed->base_curve,
-                $seed->diameter,
-                $seed->color,
-                $seed->color,
-                $seed->pack_size,
-                $seedUnit, $band, $seedUnit, $band,
-            ])
-            ->where('is_active', true)
-            ->where('stock', '>', 0)
-            ->whereKeyNot($seed->getKey());
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | Collaborative signals
-    |--------------------------------------------------------------------------
-    */
 
     /**
      * Products viewed by the same people who viewed this one, counted as
@@ -434,8 +647,8 @@ class Recommender
      * Frames bought by the customers who bought this product.
      *
      * Co-occurrence is measured per customer, not per basket: an optician's
-     * customer buys one frame and comes back months later for the next thing,
-     * so basket-level co-occurrence would be empty almost every time.
+     * customer buys one frame and comes back months later for the next
+     * thing, so basket-level co-occurrence would be empty almost every time.
      *
      * @return array<int, float> frame id => buyer count
      */
@@ -550,8 +763,8 @@ class Recommender
 
     /**
      * The handful of products that best describe what this shopper is into:
-     * their latest purchases first, then what they have been looking at, with
-     * older views counting for less.
+     * their latest purchases first, then what they have been looking at,
+     * with older views counting for less.
      *
      * @return Collection<int, array{product: Frame|ContactLens, weight: float}>
      */
@@ -591,9 +804,9 @@ class Recommender
             }
         }
 
-        // De-duplicate — a bought product is usually a viewed one too — keeping
-        // the heavier weight, then cap the seeds so rendering a homepage stays
-        // a bounded amount of work.
+        // De-duplicate — a bought product is usually a viewed one too —
+        // keeping the heavier weight, then cap the seeds so rendering a
+        // homepage stays a bounded amount of work.
         return $seeds
             ->sortByDesc('weight')
             ->unique(fn (array $seed) => $this->key($seed['product']))
@@ -777,7 +990,7 @@ class Recommender
 
     /**
      * Scale a raw count map to 0..1 so signals measured in different units
-     * (visitors, buyers, attribute points) can be added together.
+     * (visitors, buyers, cosine points) can be added together.
      *
      * @param  array<int|string, float>  $values
      * @return array<int|string, float>

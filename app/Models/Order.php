@@ -13,6 +13,7 @@ class Order extends Model
 {
     protected $fillable = [
         'user_id',
+        'assigned_delivery_user_id',
         'order_number',
         'status',
         'subtotal',
@@ -50,6 +51,11 @@ class Order extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function assignedDeliveryUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'assigned_delivery_user_id');
     }
 
     public function eyeglasses(): HasMany

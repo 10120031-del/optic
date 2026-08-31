@@ -87,8 +87,28 @@ class User extends Authenticatable
         return $this->hasMany(OrderReturn::class, 'requested_by');
     }
 
+    public function isOwner(): bool
+    {
+        return in_array($this->role, ['owner', 'admin'], true);
+    }
+
+    public function isStaff(): bool
+    {
+        return $this->role === 'staff';
+    }
+
+    public function isDelivery(): bool
+    {
+        return $this->role === 'delivery';
+    }
+
+    public function isEmployee(): bool
+    {
+        return $this->isOwner() || $this->isStaff() || $this->isDelivery();
+    }
+
     public function isAdmin(): bool
     {
-        return $this->role === 'admin';
+        return $this->isOwner();
     }
 }

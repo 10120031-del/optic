@@ -46,10 +46,38 @@ class UserFactory extends Factory
         ]);
     }
 
+    public function customer(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'customer',
+        ]);
+    }
+
     public function admin(): static
     {
         return $this->state(fn (array $attributes) => [
             'role' => 'admin',
+        ]);
+    }
+
+    public function owner(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'owner',
+        ]);
+    }
+
+    public function staff(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'staff',
+        ]);
+    }
+
+    public function delivery(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'delivery',
         ]);
     }
 }

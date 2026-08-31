@@ -19,10 +19,16 @@ class EnsureUserIsCustomer
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($request->user()?->isAdmin()) {
+        if ($request->user()?->isOwner() || $request->user()?->isStaff()) {
             return redirect()
                 ->route('admin.dashboard')
                 ->with('status', __('Shopping and account pages are for customers. You are signed in as staff.'));
+        }
+
+        if ($request->user()?->isDelivery()) {
+            return redirect()
+                ->route('delivery.orders.index')
+                ->with('status', __('Delivery staff manage assigned orders from their own console.'));
         }
 
         return $next($request);

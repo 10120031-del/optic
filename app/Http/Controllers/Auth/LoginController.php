@@ -32,10 +32,14 @@ class LoginController extends Controller
 
         $request->session()->regenerate();
 
-        // Staff go straight to the console; they have no cart to carry over
-        // and the customer-facing account pages are closed to them.
-        if ($request->user()->isAdmin()) {
+        // Staff and delivery logs go straight to their work consoles; they have
+        // no cart to carry over and the customer-facing account pages are closed to them.
+        if ($request->user()->isOwner() || $request->user()->isStaff()) {
             return redirect()->intended(route('admin.dashboard'));
+        }
+
+        if ($request->user()->isDelivery()) {
+            return redirect()->intended(route('delivery.orders.index'));
         }
 
         $carts->mergeSessionCartIntoUser($request, $request->user());

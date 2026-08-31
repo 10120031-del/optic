@@ -47,6 +47,7 @@
             <nav class="hidden items-center gap-7 md:flex" aria-label="Primary">
                 <a href="{{ route('frames.index') }}" class="nav-link {{ request()->routeIs('frames.*') ? 'is-active' : '' }}">{{ __('Eyeglasses') }}</a>
                 <a href="{{ route('contact-lenses.index') }}" class="nav-link {{ request()->routeIs('contact-lenses.*') ? 'is-active' : '' }}">{{ __('Contact Lenses') }}</a>
+                <a href="{{ route('collections.index') }}" class="nav-link {{ request()->routeIs('collections.*') ? 'is-active' : '' }}">{{ __('Collections') }}</a>
                 <a href="{{ route('face-match.create') }}" class="nav-link {{ request()->routeIs('face-match.*') ? 'is-active' : '' }}">
                     {{ __('AI Face Match') }}
                     <span class="ml-1 inline-flex items-center gap-1 align-middle font-mono text-[9px] uppercase tracking-wider text-signal">

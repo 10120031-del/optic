@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Models\Payment;
+use App\Models\User;
 use App\Services\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,8 +21,13 @@ class OrderController extends Controller
 
     public function index(Request $request): View
     {
-        $orders = Order::query()
-            ->with('user')
+        $query = Order::query()->with('user');
+
+        if ($request->user()?->isDelivery()) {
+            $query->where('assigned_delivery_user_id', $request->user()->id);
+        }
+
+        $orders = $query
             ->when($request->filled('status'), fn ($q) => $q->where('status', $request->string('status')->toString()))
             ->when($request->filled('q'), fn ($q) => $q->whereLike('order_number', '%'.$request->string('q')->toString().'%'))
             ->orderByDesc('created_at')
@@ -31,11 +37,19 @@ class OrderController extends Controller
         return view('admin.orders.index', ['orders' => $orders, 'statuses' => self::STATUSES]);
     }
 
-    public function show(Order $order): View
+    public function show(Request $request, Order $order): View
     {
-        $order->load(['user', 'eyeglasses.frame', 'eyeglasses.lens', 'eyeglasses.features', 'contactLenses', 'payments', 'statusHistory.changedBy', 'returns.items']);
+        if ($request->user()?->isDelivery() && $order->assigned_delivery_user_id !== $request->user()->id) {
+            abort(403, 'This order has not been assigned to you.');
+        }
 
-        return view('admin.orders.show', ['order' => $order, 'statuses' => self::STATUSES]);
+        $order->load(['user', 'assignedDeliveryUser', 'eyeglasses.frame', 'eyeglasses.lens', 'eyeglasses.features', 'contactLenses', 'payments', 'statusHistory.changedBy', 'returns.items']);
+
+        return view('admin.orders.show', [
+            'order' => $order,
+            'statuses' => $this->statusesFor($request->user()),
+            'deliveryUsers' => User::whereIn('role', ['delivery'])->orderBy('first_name')->get(),
+        ]);
     }
 
     /**
@@ -45,6 +59,10 @@ class OrderController extends Controller
      */
     public function updateStatus(Request $request, Order $order): RedirectResponse
     {
+        if ($request->user()?->isDelivery() && $order->assigned_delivery_user_id !== $request->user()->id) {
+            abort(403, 'This order has not been assigned to you.');
+        }
+
         $data = $request->validate([
             'status' => ['required', 'in:'.implode(',', self::STATUSES)],
             'note' => ['nullable', 'string', 'max:1000'],
@@ -52,6 +70,8 @@ class OrderController extends Controller
             'tracking_number' => ['nullable', 'string', 'max:255'],
             'estimated_delivery_date' => ['nullable', 'date'],
         ]);
+
+        $this->ensureRoleCanUpdateStatus($request->user(), $data['status']);
 
         $timestampField = match ($data['status']) {
             'paid' => 'paid_at',
@@ -100,6 +120,23 @@ class OrderController extends Controller
         return back()->with('status', 'Order updated.');
     }
 
+    public function assignDelivery(Request $request, Order $order): RedirectResponse
+    {
+        if (! $request->user()?->isOwner() && ! $request->user()?->isStaff()) {
+            abort(403, 'Only the owner or staff can delegate delivery orders.');
+        }
+
+        $data = $request->validate([
+            'assigned_delivery_user_id' => ['nullable', 'exists:users,id'],
+        ]);
+
+        $order->update([
+            'assigned_delivery_user_id' => $data['assigned_delivery_user_id'],
+        ]);
+
+        return back()->with('status', 'Delivery assignment updated.');
+    }
+
     /**
      * Keep the payment record in step with the status the owner just set.
      *
@@ -136,5 +173,47 @@ class OrderController extends Controller
                 ->where('status', Payment::STATUS_COMPLETED)
                 ->update(['status' => Payment::STATUS_REFUNDED]);
         }
+    }
+
+    private function ensureRoleCanUpdateStatus(User $user, string $status): void
+    {
+        if ($user->isOwner()) {
+            return;
+        }
+
+        if ($user->isStaff()) {
+            if (in_array($status, ['pending', 'paid', 'processing', 'shipped', 'delivered'], true)) {
+                return;
+            }
+
+            abort(403, 'Staff cannot take that decision.');
+        }
+
+        if ($user->isDelivery()) {
+            if (in_array($status, ['processing', 'shipped', 'delivered'], true)) {
+                return;
+            }
+
+            abort(403, 'Delivery staff can only move an assigned order through fulfilment.');
+        }
+
+        abort(403, 'This account is not allowed to manage orders.');
+    }
+
+    private function statusesFor(?User $user): array
+    {
+        if (! $user || $user->isOwner()) {
+            return self::STATUSES;
+        }
+
+        if ($user->isStaff()) {
+            return ['pending', 'paid', 'processing', 'shipped', 'delivered'];
+        }
+
+        if ($user->isDelivery()) {
+            return ['processing', 'shipped', 'delivered'];
+        }
+
+        return [];
     }
 }

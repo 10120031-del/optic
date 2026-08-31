@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\CollectionController as AdminCollectionController;
 use App\Http\Controllers\Admin\ContactLensController as AdminContactLensController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\FrameController as AdminFrameController;
@@ -14,6 +15,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CheckoutController;
+use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\ContactLensController;
 use App\Http\Controllers\FaceMatchController;
 use App\Http\Controllers\FrameController;
@@ -38,6 +40,9 @@ Route::get('/frames/{frame}', [FrameController::class, 'show'])->name('frames.sh
 
 Route::get('/contact-lenses', [ContactLensController::class, 'index'])->name('contact-lenses.index');
 Route::get('/contact-lenses/{contactLens}', [ContactLensController::class, 'show'])->name('contact-lenses.show');
+
+Route::get('/collections', [CollectionController::class, 'index'])->name('collections.index');
+Route::get('/collections/{collection}', [CollectionController::class, 'show'])->name('collections.show');
 
 Route::get('/face-match', [FaceMatchController::class, 'create'])->name('face-match.create');
 Route::post('/face-match', [FaceMatchController::class, 'analyze'])->name('face-match.analyze');
@@ -124,6 +129,18 @@ Route::middleware('auth')->group(function () {
 
 /*
 |--------------------------------------------------------------------------
+| Delivery console
+|--------------------------------------------------------------------------
+*/
+
+Route::middleware(['auth', 'delivery'])->prefix('delivery')->name('delivery.')->group(function () {
+    Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
+    Route::get('/orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
+    Route::patch('/orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->name('orders.status');
+});
+
+/*
+|--------------------------------------------------------------------------
 | Admin (shop owner / staff)
 |--------------------------------------------------------------------------
 */
@@ -141,6 +158,12 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::resource('lens-features', AdminLensFeatureController::class)
         ->except(['show'])
         ->parameters(['lens-features' => 'lensFeature']);
+    // announce() is POST-only and deliberately not part of the resource:
+    // it is the one action here that mails customers, so it never sits
+    // behind a GET a crawler or a refresh could replay.
+    Route::resource('collections', AdminCollectionController::class)->except(['show']);
+    Route::post('/collections/{collection}/announce', [AdminCollectionController::class, 'announce'])->name('collections.announce');
+
     Route::resource('contact-lenses', AdminContactLensController::class)
         ->except(['show'])
         ->parameters(['contact-lenses' => 'contactLens']);
@@ -148,6 +171,7 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/orders', [AdminOrderController::class, 'index'])->name('orders.index');
     Route::get('/orders/{order}', [AdminOrderController::class, 'show'])->name('orders.show');
     Route::patch('/orders/{order}/status', [AdminOrderController::class, 'updateStatus'])->name('orders.status');
+    Route::patch('/orders/{order}/assign-delivery', [AdminOrderController::class, 'assignDelivery'])->name('orders.assign-delivery');
 
     Route::get('/returns', [AdminOrderReturnController::class, 'index'])->name('returns.index');
     Route::get('/returns/{return}', [AdminOrderReturnController::class, 'show'])->name('returns.show');

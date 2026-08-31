@@ -2,13 +2,15 @@
 
 namespace App\Models;
 
+use App\Observers\CatalogEmbeddingObserver;
 use App\Observers\StockObserver;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
 
-#[ObservedBy(StockObserver::class)]
+#[ObservedBy([StockObserver::class, CatalogEmbeddingObserver::class])]
 class ContactLens extends Model
 {
     /** Boxes move faster than frames, so the low-stock line sits higher. */
@@ -62,5 +64,11 @@ class ContactLens extends Model
     public function approvedReviews(): MorphMany
     {
         return $this->morphMany(Review::class, 'reviewable')->where('is_approved', true);
+    }
+
+    /** Curated drops this product has been placed in. */
+    public function collections(): MorphToMany
+    {
+        return $this->morphToMany(Collection::class, 'item', 'collection_items')->withTimestamps();
     }
 }

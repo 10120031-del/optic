@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Collection as ProductCollection;
 use App\Models\ContactLens;
 use App\Models\Frame;
 use App\Models\Order;
@@ -12,23 +13,31 @@ use App\Models\User;
 use App\Notifications\InboxNotification;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Str;
 
 /**
  * The shop's notification catalogue: every event worth telling someone
  * about, the wording it gets, and who receives it.
  *
- * Nothing calls this from a controller. The observers in App\Observers watch
- * the lifecycle of orders, returns, reviews, prescriptions, products and
+ * Almost nothing calls this from a controller. The observers in App\Observers
+ * watch the lifecycle of orders, returns, reviews, prescriptions, products and
  * accounts and call the matching method here, so a notification cannot be
  * forgotten by a new code path that touches the same model. The seeders are
  * the one place that must not fire them, and they already run
  * WithoutModelEvents.
  *
- * Two audiences:
+ * The exception is collectionAnnounced(). Announcing a collection is not
+ * something that happens to a model — it is a decision the owner makes on
+ * a collection that may have existed for weeks — so it hangs off an explicit
+ * controller action rather than an observer. Saving a collection must never
+ * mail the customer list.
+ *
+ * Three audiences:
  *   - the customer, who hears about their own order/return/prescription/review;
  *   - the owner and any other staff account, who hear about anything needing
  *     a decision (new order, return to settle, review to moderate,
- *     prescription to verify) or a restock.
+ *     prescription to verify) or a restock;
+ *   - every customer at once, but only for an announced collection.
  *
  * Every url is built with absolute: false. The inbox redirects the reader to
  * whatever is stored, so keeping it a path means it can never point off-site
@@ -304,6 +313,53 @@ class Notifier
 
     /*
     |--------------------------------------------------------------------------
+    | Collections
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * The owner has announced a curated drop.
+     *
+     * The only broadcast in this catalogue: everything else here tells one
+     * person about their own business, this tells the whole shop. Every
+     * customer gets the inbox row; the e-mail that goes out alongside it is
+     * the controller's job, because it is gated on newsletter_opt_in and
+     * only marketing consent belongs behind that gate — an inbox row on a
+     * site they chose to visit does not.
+     *
+     * @return int  How many customers were told, for the owner's receipt.
+     */
+    public function collectionAnnounced(ProductCollection $collection): int
+    {
+        $customers = User::where('role', 'customer')->get();
+
+        $notification = new InboxNotification(
+            event: 'collection.announced',
+            title: __('New collection: :name', ['name' => $collection->name]),
+            body: $collection->description
+                ? Str::limit($collection->description, 140)
+                : __(':count new pieces just landed. Take a look before they go.', ['count' => $collection->itemCount()]),
+            url: route('collections.show', $collection, absolute: false),
+            level: 'success',
+        );
+
+        $customers->each->notify($notification);
+
+        $this->toStaff(new InboxNotification(
+            event: 'admin.collection.announced',
+            title: __('":name" is live', ['name' => $collection->name]),
+            body: __('Announced to :count customer(s). Newsletter subscribers are also getting it by e-mail.', [
+                'count' => $customers->count(),
+            ]),
+            url: route('admin.collections.edit', $collection, absolute: false),
+            level: 'success',
+        ));
+
+        return $customers->count();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | Accounts
     |--------------------------------------------------------------------------
     */
@@ -348,7 +404,7 @@ class Notifier
     /** @return Collection<int, User> */
     private function staff(): Collection
     {
-        return User::where('role', 'admin')->get();
+        return User::whereIn('role', ['owner', 'staff', 'admin'])->get();
     }
 
     private function shippingLine(Order $order): string
