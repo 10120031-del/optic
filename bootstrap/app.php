@@ -8,6 +8,9 @@ use App\Http\Middleware\EnsureUserIsStaff;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Session\TokenMismatchException;
+use Illuminate\Support\Facades\Auth;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -31,5 +34,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->trustProxies(at: '*');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // A stale CSRF token on sign-out usually means the session already
+        // expired or the page was cached after a previous logout. Treat it
+        // as a successful sign-out instead of showing the 419 page.
+        $exceptions->render(function (TokenMismatchException $e, Request $request) {
+            if (! $request->is('logout')) {
+                return null;
+            }
+
+            Auth::logout();
+
+            if ($request->hasSession()) {
+                $request->session()->invalidate();
+                $request->session()->regenerateToken();
+            }
+
+            return redirect()->route('home');
+        });
     })->create();
