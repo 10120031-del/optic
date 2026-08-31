@@ -10,6 +10,7 @@ use App\Models\Lens;
 use App\Models\Prescription;
 use App\Services\CartService;
 use App\Services\PricingService;
+use App\Services\Recommender;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -19,6 +20,7 @@ class CartController extends Controller
     public function __construct(
         private readonly CartService $carts,
         private readonly PricingService $pricing,
+        private readonly Recommender $recommender,
     ) {
     }
 
@@ -36,10 +38,19 @@ class CartController extends Controller
         $eyeglassTotal = $cart->eyeglasses->sum(fn (CartEyeglass $line) => $this->pricing->eyeglassLineTotal($line));
         $contactLensTotal = $cart->contactLenses->sum(fn (CartContactLens $line) => $this->pricing->contactLensLineTotal($line));
 
+        // Seed the cross-sell off the catalog products in the cart, not the
+        // cart lines, so the recommender scores against real attributes.
+        $inCart = $cart->eyeglasses
+            ->map(fn (CartEyeglass $line) => $line->frame)
+            ->merge($cart->contactLenses->map(fn (CartContactLens $line) => $line->contactLens))
+            ->filter()
+            ->values();
+
         return view('cart.index', [
             'cart' => $cart,
             'pricing' => $this->pricing,
             'subtotal' => round($eyeglassTotal + $contactLensTotal, 2),
+            'alsoBought' => $this->recommender->toCompleteCart($inCart),
         ]);
     }
 

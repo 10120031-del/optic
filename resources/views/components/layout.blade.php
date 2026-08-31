@@ -10,6 +10,10 @@
         $cart = app(\App\Services\CartService::class)->current(request());
         $cartCount = $cart->eyeglasses()->sum('quantity') + $cart->contactLenses()->sum('quantity');
     }
+
+    // Counted here rather than through a view composer, to keep the layout's
+    // per-request lookups in one place alongside the cart count above.
+    $unreadNotifications = auth()->check() ? auth()->user()->unreadNotifications()->count() : 0;
 @endphp
 
 <!DOCTYPE html>
@@ -59,6 +63,18 @@
             </nav>
 
             <div class="flex items-center gap-4">
+                @auth
+                    <a href="{{ route('notifications.index') }}" class="nav-link relative flex items-center gap-1.5 {{ request()->routeIs('notifications.*') ? 'is-active' : '' }}" aria-label="{{ __('Inbox') }}">
+                        <svg class="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
+                            <path d="M18 8.5a6 6 0 1 0-12 0c0 5-2 6.5-2 6.5h16s-2-1.5-2-6.5" stroke-linecap="round" stroke-linejoin="round" />
+                            <path d="M13.7 19a2 2 0 0 1-3.4 0" stroke-linecap="round" />
+                        </svg>
+                        @if ($unreadNotifications > 0)
+                            <span class="flex size-4 items-center justify-center rounded-full bg-signal font-mono text-[10px] text-white">{{ $unreadNotifications > 9 ? '9+' : $unreadNotifications }}</span>
+                        @endif
+                    </a>
+                @endauth
+
                 @unless ($isStaff)
                 <a href="{{ route('cart.index') }}" class="nav-link relative flex items-center gap-1.5 {{ request()->routeIs('cart.*') ? 'is-active' : '' }}" aria-label="{{ __('Cart') }}">
                     <svg class="size-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
@@ -95,6 +111,9 @@
             <a href="{{ route('contact-lenses.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('contact-lenses.*') ? 'is-active' : '' }}">{{ __('Contacts') }}</a>
             <a href="{{ route('face-match.create') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('face-match.*') ? 'is-active' : '' }}">{{ __('AI Match') }}</a>
             @auth
+                <a href="{{ route('notifications.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('notifications.*') ? 'is-active' : '' }}">
+                    {{ __('Inbox') }}@if ($unreadNotifications > 0) ({{ $unreadNotifications }})@endif
+                </a>
                 @if ($isStaff)
                     <a href="{{ route('admin.dashboard') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('admin.*') ? 'is-active' : '' }}">{{ __('Admin') }}</a>
                 @else
@@ -148,6 +167,7 @@
                                 <a href="{{ route('orders.index') }}" class="block hover:text-ink">{{ __('Orders') }}</a>
                                 <a href="{{ route('prescriptions.index') }}" class="block hover:text-ink">{{ __('Prescriptions') }}</a>
                             @endif
+                            <a href="{{ route('notifications.index') }}" class="block hover:text-ink">{{ __('Inbox') }}</a>
                         @else
                             <a href="{{ route('login') }}" class="block hover:text-ink">{{ __('Sign in') }}</a>
                             <a href="{{ route('register') }}" class="block hover:text-ink">{{ __('Create account') }}</a>

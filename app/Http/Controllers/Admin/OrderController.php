@@ -6,13 +6,17 @@ use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Models\Payment;
+use App\Services\InventoryService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class OrderController extends Controller
 {
     private const STATUSES = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'];
+
+    public function __construct(private readonly InventoryService $inventory) {}
 
     public function index(Request $request): View
     {
@@ -68,16 +72,30 @@ class OrderController extends Controller
             $changes[$timestampField] = now();
         }
 
-        $order->update($changes);
+        // The status, the payment, the audit row and the stock that goes back
+        // on the shelf are one change, not four — a failure part way through
+        // must not leave an order cancelled with its units still spent.
+        DB::transaction(function () use ($request, $order, $data, $changes) {
+            $wasCancelled = $order->status === 'cancelled';
 
-        $this->settlePayments($order, $data['status']);
+            $order->update($changes);
 
-        OrderStatusHistory::create([
-            'order_id' => $order->id,
-            'status' => $data['status'],
-            'note' => $data['note'] ?? null,
-            'changed_by' => $request->user()->id,
-        ]);
+            $this->settlePayments($order, $data['status']);
+
+            // A cancelled order never shipped, so its units go back. Guarded on
+            // the previous status so re-saving an already-cancelled order
+            // cannot restock it twice.
+            if ($data['status'] === 'cancelled' && ! $wasCancelled) {
+                $this->inventory->restore($order);
+            }
+
+            OrderStatusHistory::create([
+                'order_id' => $order->id,
+                'status' => $data['status'],
+                'note' => $data['note'] ?? null,
+                'changed_by' => $request->user()->id,
+            ]);
+        });
 
         return back()->with('status', 'Order updated.');
     }

@@ -31,7 +31,7 @@
                             <td>{{ $lens->brand }}</td>
                             <td>{{ str($lens->type)->headline() }}</td>
                             <td class="text-right font-mono text-ink">${{ number_format($lens->price, 2) }}</td>
-                            <td class="text-right font-mono {{ $lens->stock <= 10 ? 'text-warn' : '' }}">{{ $lens->stock }}</td>
+                            <td class="text-right font-mono {{ $lens->stock <= \App\Models\ContactLens::LOW_STOCK_THRESHOLD ? 'text-warn' : '' }}">{{ $lens->stock }}</td>
                             <td>
                                 @if ($lens->is_active)
                                     <span class="badge-signal">{{ __('Active') }}</span>

@@ -18,6 +18,7 @@ use App\Http\Controllers\ContactLensController;
 use App\Http\Controllers\FaceMatchController;
 use App\Http\Controllers\FrameController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OrderController;
 use App\Http\Controllers\OrderReturnController;
 use App\Http\Controllers\PrescriptionController;
@@ -100,6 +101,26 @@ Route::middleware(['auth', 'customer'])->group(function () {
 Route::get('/prescriptions/{prescription}/file', [PrescriptionController::class, 'file'])
     ->middleware('auth')
     ->name('prescriptions.file');
+
+/*
+|--------------------------------------------------------------------------
+| Inbox
+|--------------------------------------------------------------------------
+|
+| Shared by customers and staff — the shop owner's alerts and a shopper's
+| order updates are the same rows in the same table, scoped to whoever is
+| signed in. Outside the 'customer' group so staff aren't bounced to the
+| dashboard, and outside the 'admin' prefix so customers can reach it.
+|
+*/
+
+Route::middleware('auth')->group(function () {
+    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::post('/notifications/read-all', [NotificationController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'read'])->name('notifications.read');
+    Route::delete('/notifications/read', [NotificationController::class, 'clear'])->name('notifications.clear');
+    Route::delete('/notifications/{notification}', [NotificationController::class, 'destroy'])->name('notifications.destroy');
+});
 
 /*
 |--------------------------------------------------------------------------

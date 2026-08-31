@@ -2,12 +2,18 @@
 
 namespace App\Models;
 
+use App\Observers\StockObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
+#[ObservedBy(StockObserver::class)]
 class ContactLens extends Model
 {
+    /** Boxes move faster than frames, so the low-stock line sits higher. */
+    public const LOW_STOCK_THRESHOLD = 10;
+
     protected $table = 'contact_lenses';
 
     protected $fillable = [

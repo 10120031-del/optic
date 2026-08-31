@@ -152,6 +152,19 @@
 
     <x-reviews-section :reviews="$frame->approvedReviews" reviewable-type="frame" :reviewable-id="$frame->id" />
 
+    <x-product-rail
+        :products="$alsoBought"
+        :eyebrow="__('Bought together')"
+        :title="__('Customers who bought this also bought')"
+    />
+
+    <x-product-rail
+        :products="$similarFrames"
+        :eyebrow="__('Similar')"
+        :title="__('You may also like')"
+        :note="__('Matched on shape, fit and material — and on what other shoppers looked at alongside this frame.')"
+    />
+
     <script>
         const framePrice = {{ (float) $frame->price }};
 

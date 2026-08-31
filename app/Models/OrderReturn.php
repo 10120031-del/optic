@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Observers\OrderReturnObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[ObservedBy(OrderReturnObserver::class)]
 class OrderReturn extends Model
 {
     protected $table = 'order_returns';

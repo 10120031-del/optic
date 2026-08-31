@@ -84,4 +84,17 @@
     </div>
 
     <x-reviews-section :reviews="$contactLens->approvedReviews" reviewable-type="contact_lens" :reviewable-id="$contactLens->id" />
+
+    <x-product-rail
+        :products="$alsoBought"
+        :eyebrow="__('Bought together')"
+        :title="__('Customers who bought this also bought')"
+    />
+
+    <x-product-rail
+        :products="$similarLenses"
+        :eyebrow="__('Similar')"
+        :title="__('You may also like')"
+        :note="__('Same replacement schedule and a comparable fit — matched on base curve, diameter and cost per lens.')"
+    />
 </x-layout>

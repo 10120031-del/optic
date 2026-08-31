@@ -4,11 +4,16 @@ namespace App\Http\Controllers;
 
 use App\Models\ContactLens;
 use App\Models\ProductView;
+use App\Services\Recommender;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class ContactLensController extends Controller
 {
+    public function __construct(private readonly Recommender $recommender)
+    {
+    }
+
     public function index(Request $request): View
     {
         $lenses = ContactLens::query()
@@ -47,6 +52,12 @@ class ContactLensController extends Controller
 
         $contactLens->load(['approvedReviews' => fn ($q) => $q->with(['user', 'images'])->latest()]);
 
-        return view('contact-lenses.show', ['contactLens' => $contactLens]);
+        $recommendations = $this->recommender->forProductPage($contactLens);
+
+        return view('contact-lenses.show', [
+            'contactLens' => $contactLens,
+            'similarLenses' => $recommendations['similar'],
+            'alsoBought' => $recommendations['alsoBought'],
+        ]);
     }
 }

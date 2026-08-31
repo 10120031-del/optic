@@ -1,13 +1,18 @@
 @props(['title' => null, 'heading' => null])
 
 @php
+    $unreadNotifications = auth()->check() ? auth()->user()->unreadNotifications()->count() : 0;
+
+    // 'badge' is the count shown right-aligned on the tab. $pendingOrdersCount
+    // is passed in by the dashboard only, so it falls back to nothing elsewhere.
     $navItems = [
+        ['label' => __('Inbox'), 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => $unreadNotifications],
         ['label' => __('Dashboard'), 'route' => 'admin.dashboard', 'pattern' => 'admin.dashboard'],
         ['label' => __('Frames'), 'route' => 'admin.frames.index', 'pattern' => 'admin.frames.*'],
         ['label' => __('Lens Packages'), 'route' => 'admin.lenses.index', 'pattern' => 'admin.lenses.*'],
         ['label' => __('Lens Features'), 'route' => 'admin.lens-features.index', 'pattern' => 'admin.lens-features.*'],
         ['label' => __('Contact Lenses'), 'route' => 'admin.contact-lenses.index', 'pattern' => 'admin.contact-lenses.*'],
-        ['label' => __('Orders'), 'route' => 'admin.orders.index', 'pattern' => 'admin.orders.*'],
+        ['label' => __('Orders'), 'route' => 'admin.orders.index', 'pattern' => 'admin.orders.*', 'badge' => $pendingOrdersCount ?? 0],
         ['label' => __('Returns'), 'route' => 'admin.returns.index', 'pattern' => 'admin.returns.*'],
         ['label' => __('Prescriptions'), 'route' => 'admin.prescriptions.index', 'pattern' => 'admin.prescriptions.*'],
         ['label' => __('Reviews'), 'route' => 'admin.reviews.index', 'pattern' => 'admin.reviews.*'],
@@ -47,8 +52,8 @@
                        class="flex items-center gap-2.5 whitespace-nowrap rounded-[3px] px-3 py-2 text-sm transition-colors
                               {{ request()->routeIs($item['pattern']) ? 'bg-ink text-white' : 'text-ink-soft hover:bg-wash hover:text-ink' }}">
                         {{ $item['label'] }}
-                        @if ($item['route'] === 'admin.orders.index' && ($pendingOrdersCount ?? 0) > 0)
-                            <span class="ml-auto font-mono text-[10px] {{ request()->routeIs($item['pattern']) ? 'text-white/70' : 'text-ink-faint' }}">{{ $pendingOrdersCount }}</span>
+                        @if (($item['badge'] ?? 0) > 0)
+                            <span class="ml-auto font-mono text-[10px] {{ request()->routeIs($item['pattern']) ? 'text-white/70' : 'text-ink-faint' }}">{{ $item['badge'] }}</span>
                         @endif
                     </a>
                 @endforeach

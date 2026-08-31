@@ -143,4 +143,12 @@
             @endif
         </div>
     </div>
+
+    @if ($related)
+        <x-product-rail
+            :products="$related['products']"
+            :eyebrow="__('Because you bought')"
+            :title="__('You bought :product — you might like these', ['product' => $related['seed']->name])"
+        />
+    @endif
 </x-layout>

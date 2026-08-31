@@ -4,6 +4,25 @@
         <h1 class="mt-1 font-display text-3xl font-semibold text-ink">{{ __('Checkout') }}</h1>
     </div>
 
+    @if ($shortages)
+        <div class="panel border-warn/30 bg-warn-soft mb-8 flex items-start gap-3 px-4 py-3" role="alert">
+            <svg class="mt-0.5 size-4 shrink-0 text-warn" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                <circle cx="10" cy="10" r="7.5" />
+                <path d="M10 6v4.5" stroke-linecap="round" />
+                <circle cx="10" cy="13.4" r="0.6" fill="currentColor" stroke="none" />
+            </svg>
+            <div class="text-sm text-ink">
+                <p class="font-medium">{{ __('We cannot fill all of this right now:') }}</p>
+                <ul class="mt-1 list-disc space-y-0.5 pl-4 text-ink-soft">
+                    @foreach ($shortages as $message)
+                        <li>{{ $message }}</li>
+                    @endforeach
+                </ul>
+                <a href="{{ route('cart.index') }}" class="mt-2 inline-block text-xs text-ink underline hover:no-underline">{{ __('Adjust your cart') }}</a>
+            </div>
+        </div>
+    @endif
+
     <div class="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_360px]">
         <form method="POST" action="{{ route('checkout.store') }}" class="space-y-8">
             @csrf

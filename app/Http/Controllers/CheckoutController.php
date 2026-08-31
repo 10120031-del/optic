@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Models\Payment;
 use App\Services\CartService;
+use App\Services\InventoryService;
 use App\Services\PricingService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,8 +19,8 @@ class CheckoutController extends Controller
     public function __construct(
         private readonly CartService $carts,
         private readonly PricingService $pricing,
-    ) {
-    }
+        private readonly InventoryService $inventory,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -33,6 +34,9 @@ class CheckoutController extends Controller
         return view('checkout.index', [
             'cart' => $cart,
             'totals' => $this->pricing->orderTotals($subtotal, shippingCost: 5.00, taxRate: 0.0),
+            // Shown as a warning rather than a block: store() re-checks under a
+            // row lock, and that is the answer that counts.
+            'shortages' => $this->inventory->messages($this->inventory->shortages($cart)),
         ]);
     }
 
@@ -60,6 +64,12 @@ class CheckoutController extends Controller
         $totals = $this->pricing->orderTotals($subtotal, shippingCost: 5.00, taxRate: 0.0);
 
         $order = DB::transaction(function () use ($request, $data, $cart, $totals) {
+            // First thing inside the transaction: lock the products, confirm
+            // the shelf still covers the cart, and draw the units down. If it
+            // no longer does this throws and the whole order is rolled back,
+            // so an oversold order is never half-written.
+            $this->inventory->commit($cart);
+
             $order = Order::create([
                 'user_id' => $request->user()->id,
                 'order_number' => 'OPT-'.strtoupper(Str::random(8)),

@@ -108,5 +108,11 @@
                 <a href="{{ route('checkout.index') }}" class="btn-accent mt-5 w-full">{{ __('Checkout') }}</a>
             </div>
         </div>
+
+        <x-product-rail
+            :products="$alsoBought"
+            :eyebrow="__('Before you check out')"
+            :title="__('Goes well with your cart')"
+        />
     @endif
 </x-layout>

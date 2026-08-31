@@ -31,7 +31,7 @@
                             <td class="font-mono text-xs">{{ $frame->sku }}</td>
                             <td>{{ $frame->brand }}</td>
                             <td class="text-right font-mono text-ink">${{ number_format($frame->price, 2) }}</td>
-                            <td class="text-right font-mono {{ $frame->stock <= 5 ? 'text-warn' : '' }}">{{ $frame->stock }}</td>
+                            <td class="text-right font-mono {{ $frame->stock <= \App\Models\Frame::LOW_STOCK_THRESHOLD ? 'text-warn' : '' }}">{{ $frame->stock }}</td>
                             <td>
                                 @if ($frame->is_active)
                                     <span class="badge-signal">{{ __('Active') }}</span>

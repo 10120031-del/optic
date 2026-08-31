@@ -3,11 +3,16 @@
 namespace App\Http\Controllers;
 
 use App\Models\Order;
+use App\Services\Recommender;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class OrderController extends Controller
 {
+    public function __construct(private readonly Recommender $recommender)
+    {
+    }
+
     public function index(Request $request): View
     {
         $orders = $request->user()->orders()->latest()->paginate(15);
@@ -34,6 +39,11 @@ class OrderController extends Controller
             'returns.items',
         ]);
 
-        return view('orders.show', ['order' => $order]);
+        return view('orders.show', [
+            'order' => $order,
+            // "You bought X — you might like Y". Null when the order's
+            // products have nothing to pair with yet; the view skips it.
+            'related' => $this->recommender->relatedToOrder($order),
+        ]);
     }
 }

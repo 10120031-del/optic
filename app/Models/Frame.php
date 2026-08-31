@@ -2,14 +2,24 @@
 
 namespace App\Models;
 
+use App\Observers\StockObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
+#[ObservedBy(StockObserver::class)]
 class Frame extends Model
 {
+    /**
+     * At or below this many in stock the frame is flagged as low: badged on
+     * the storefront card, listed on the staff dashboard, and — the first
+     * time it crosses down over this line — pushed to the owner's inbox.
+     */
+    public const LOW_STOCK_THRESHOLD = 5;
+
     protected $fillable = [
         'name',
         'brand',

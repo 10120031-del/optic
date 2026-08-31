@@ -13,7 +13,7 @@
                 </svg>
             </div>
         @endif
-        @if ($frame->stock <= 5 && $frame->stock > 0)
+        @if ($frame->stock <= \App\Models\Frame::LOW_STOCK_THRESHOLD && $frame->stock > 0)
             <span class="badge-warn absolute left-2 top-2 bg-white">{{ __('Low stock') }}</span>
         @elseif ($frame->stock === 0)
             <span class="badge-danger absolute left-2 top-2 bg-white">{{ __('Out of stock') }}</span>

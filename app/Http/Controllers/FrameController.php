@@ -5,11 +5,16 @@ namespace App\Http\Controllers;
 use App\Models\Frame;
 use App\Models\Lens;
 use App\Models\ProductView;
+use App\Services\Recommender;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
 class FrameController extends Controller
 {
+    public function __construct(private readonly Recommender $recommender)
+    {
+    }
+
     /**
      * Browse/search eyeglasses: free-text search plus the filters called
      * for in requirement 1 (color, gender, size), extended with the
@@ -69,9 +74,16 @@ class FrameController extends Controller
             'approvedReviews' => fn ($q) => $q->with(['user', 'images'])->latest(),
         ]);
 
+        // Logged above before recommending, so the co-view signal counts this
+        // visit — two shoppers comparing the same two frames is exactly what
+        // the "you may also like" rail is built out of.
+        $recommendations = $this->recommender->forProductPage($frame);
+
         return view('frames.show', [
             'frame' => $frame,
             'lenses' => Lens::where('is_active', true)->with('features')->get(),
+            'similarFrames' => $recommendations['similar'],
+            'alsoBought' => $recommendations['alsoBought'],
         ]);
     }
 

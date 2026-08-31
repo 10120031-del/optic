@@ -2,10 +2,13 @@
 
 namespace App\Models;
 
+use App\Observers\PrescriptionObserver;
+use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+#[ObservedBy(PrescriptionObserver::class)]
 class Prescription extends Model
 {
     protected $fillable = [
