@@ -31,6 +31,21 @@
         </a>
     </div>
 
+    @if (auth()->user()?->isOwner())
+        <div class="mb-10">
+            <a href="{{ route('admin.users.index') }}" class="panel flex flex-wrap items-center justify-between gap-4 p-5 transition-colors hover:border-ink">
+                <div>
+                    <p class="eyebrow">{{ __('Team accounts') }}</p>
+                    <p class="mt-1 text-sm text-ink-soft">{{ __('Promote customers to staff or delivery, or move them back to a shopper account.') }}</p>
+                </div>
+                <div class="flex gap-6 font-mono text-xs text-ink-faint">
+                    <span>{{ trans_choice(':count staff member|:count staff members', $staffCount, ['count' => $staffCount]) }}</span>
+                    <span>{{ trans_choice(':count delivery|:count delivery', $deliveryCount, ['count' => $deliveryCount]) }}</span>
+                </div>
+            </a>
+        </div>
+    @endif
+
     {{-- Revenue --}}
     <div class="panel mb-10 p-6">
         <div class="mb-6 flex items-baseline justify-between">

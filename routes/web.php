@@ -11,6 +11,7 @@ use App\Http\Controllers\Admin\OrderReturnController as AdminOrderReturnControll
 use App\Http\Controllers\Admin\PrescriptionController as AdminPrescriptionController;
 use App\Http\Controllers\Admin\PromotionCampaignController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
+use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
 use App\Http\Controllers\CartController;
@@ -188,6 +189,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::delete('/reviews/{review}', [AdminReviewController::class, 'destroy'])->name('reviews.destroy');
 
     Route::middleware('owner')->group(function () {
+        Route::get('/users', [AdminUserController::class, 'index'])->name('users.index');
+        Route::get('/users/{user}', [AdminUserController::class, 'show'])->name('users.show');
+        Route::patch('/users/{user}/role', [AdminUserController::class, 'updateRole'])->name('users.role');
+
         Route::get('/promotions', [PromotionCampaignController::class, 'index'])->name('promotions.index');
         Route::get('/promotions/create', [PromotionCampaignController::class, 'create'])->name('promotions.create');
         Route::post('/promotions', [PromotionCampaignController::class, 'store'])->name('promotions.store');

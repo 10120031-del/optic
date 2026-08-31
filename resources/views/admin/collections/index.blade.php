@@ -3,7 +3,7 @@
         <p class="max-w-xl text-sm text-ink-soft">
             {{ __('Group frames and contact lenses into a named drop. Nothing is published and nobody is notified until you announce it.') }}
         </p>
-        <a href="{{ route('admin.collections.create') }}" class="btn-accent btn-sm">{{ __('New collection') }}</a>
+        <a href="{{ route('admin.collections.create') }}" class="btn-primary btn-sm">{{ __('New collection') }}</a>
     </div>
 
     @if ($collections->isEmpty())
@@ -11,7 +11,7 @@
             :title="__('No collections yet')"
             :description="__('Create one, add the products that belong to it, then announce it to your customers.')">
             <x-slot:action>
-                <a href="{{ route('admin.collections.create') }}" class="btn-accent btn-sm">{{ __('New collection') }}</a>
+                <a href="{{ route('admin.collections.create') }}" class="btn-primary btn-sm">{{ __('New collection') }}</a>
             </x-slot:action>
         </x-empty-state>
     @else

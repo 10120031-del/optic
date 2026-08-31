@@ -54,7 +54,7 @@
                           action="{{ route('admin.collections.announce', $collection) }}"
                           onsubmit="return confirm('{{ __('Announce this collection to every customer? This cannot be undone.') }}')">
                         @csrf
-                        <button type="submit" class="btn-accent" @disabled($collection->itemCount() === 0)>
+                        <button type="submit" class="btn-primary" @disabled($collection->itemCount() === 0)>
                             {{ __('Announce collection') }}
                         </button>
                     </form>

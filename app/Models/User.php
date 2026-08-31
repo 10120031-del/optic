@@ -112,6 +112,11 @@ class User extends Authenticatable
         return $this->isOwner() || $this->isStaff();
     }
 
+    public function isRoleAssignableByOwner(): bool
+    {
+        return in_array($this->role, ['customer', 'staff', 'delivery'], true);
+    }
+
     public function isAdmin(): bool
     {
         return $this->isOwner();

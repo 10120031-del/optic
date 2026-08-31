@@ -16,6 +16,7 @@
         ['label' => __('Returns'), 'route' => 'admin.returns.index', 'pattern' => 'admin.returns.*', 'roles' => ['owner', 'staff']],
         ['label' => __('Prescriptions'), 'route' => 'admin.prescriptions.index', 'pattern' => 'admin.prescriptions.*', 'roles' => ['owner', 'staff']],
         ['label' => __('Reviews'), 'route' => 'admin.reviews.index', 'pattern' => 'admin.reviews.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Team'), 'route' => 'admin.users.index', 'pattern' => 'admin.users.*', 'roles' => ['owner']],
         ['label' => __('Promotions'), 'route' => 'admin.promotions.index', 'pattern' => 'admin.promotions.*', 'roles' => ['owner']],
     ];
 

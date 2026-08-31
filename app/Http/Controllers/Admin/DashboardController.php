@@ -11,6 +11,7 @@ use App\Models\OrderEyeglass;
 use App\Models\OrderReturn;
 use App\Models\ProductView;
 use App\Models\Review;
+use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -88,6 +89,8 @@ class DashboardController extends Controller
             'topBrands' => $this->topBrands($since),
             'ratingDistribution' => $this->ratingDistribution(),
             'ordersByWeekday' => $this->ordersByWeekday($revenueByDay),
+            'staffCount' => User::where('role', 'staff')->count(),
+            'deliveryCount' => User::where('role', 'delivery')->count(),
         ]);
     }
 
