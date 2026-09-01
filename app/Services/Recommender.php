@@ -270,7 +270,13 @@ class Recommender
                 $coView = $this->normalize($this->coViewCounts($product));
                 $semantic = $this->semanticScores($product);
 
-                if ($semantic === []) {
+                // Fall back only when the semantic path could not run at all
+                // — this product has no vector, or nothing in its catalog
+                // does. An empty result from a path that *did* run means the
+                // model genuinely found nothing close, and that answer has
+                // to stand: resurrecting those products through attribute
+                // scoring would make MIN_COSINE decorative.
+                if ($semantic === null || $this->embeddedCount($product->getMorphClass()) < 2) {
                     return $this->attributeScores($product, $coView);
                 }
 
@@ -314,15 +320,19 @@ class Recommender
      * over the candidates alone would quietly award a lens rail full marks
      * for what is really an average match.
      *
-     * @return array<string, float>
+     * Returns null — distinct from an empty array — when this product has no
+     * stored vector, so callers can tell "nothing is close" apart from
+     * "there was nothing to measure".
+     *
+     * @return array<string, float>|null
      */
-    private function semanticScores(Frame|ContactLens $product): array
+    private function semanticScores(Frame|ContactLens $product): ?array
     {
         $matrix = $this->embeddingMatrix();
         $seed = $matrix[$this->key($product)] ?? null;
 
         if ($seed === null) {
-            return [];
+            return null;
         }
 
         $cosines = [];
@@ -447,6 +457,17 @@ class Recommender
 
             return $matrix;
         });
+    }
+
+    /** How many products of one class currently have a usable vector. */
+    private function embeddedCount(string $class): int
+    {
+        $prefix = $class.':';
+
+        return count(array_filter(
+            array_keys($this->embeddingMatrix()),
+            fn (string $key) => str_starts_with($key, $prefix),
+        ));
     }
 
     /**

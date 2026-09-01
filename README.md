@@ -120,6 +120,10 @@ Three things are worth knowing before the first one:
   Skip it and the site loads unstyled with a scanner that never starts.
 - **A queue worker is required** for promotion campaign email, which is queued
   rather than sent inline.
+- **Run `php artisan catalog:embed` after migrating.** It builds the vectors the
+  recommender ranks on. Skip it and the storefront still works — the recommender
+  falls back to attribute matching — but "you may also like" gets noticeably
+  worse. Needs Node, like the asset build.
 - **Create staff with `php artisan app:create-admin`.** Storefront registration
   only ever produces customers, and `DatabaseSeeder`'s demo admin must not go
   anywhere near a live database — use `--class=ProductionSeeder`, which seeds
@@ -170,5 +174,6 @@ database/
   seeders/                 DatabaseSeeder (dev) · ProductionSeeder (reference data only)
 scripts/
   copy-mediapipe-assets.mjs  Stages WASM + model into public/mediapipe on npm install
+  embed-products.mjs         Runs the sentence transformer for `php artisan catalog:embed`
 deploy.sh                  In-place deploy for a single server
 ```

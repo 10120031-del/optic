@@ -15,7 +15,7 @@ or Apache with php-fpm — the most common shape for a Laravel shop this size.
 | Database | MySQL 8.0+ / MariaDB 10.6+, or PostgreSQL 14+ | The migrations are portable across both — see §2.5 |
 | Composer | 2.x | PHP dependencies |
 | Node.js + npm | Node 20 LTS or newer | Building CSS/JS; **only needed at build time** |
-| Outbound HTTPS | — | `npm install` downloads the 3.7 MB face-landmarker model |
+| Outbound HTTPS | — | `npm install` downloads the 3.7 MB face-landmarker model; the first `catalog:embed` downloads the 23 MB sentence-transformer |
 
 There is no Redis or Memcached requirement: sessions, cache and the queue all
 run on database tables created by the `0001_01_01_*` migrations.
@@ -49,6 +49,9 @@ npm run build
 # 4 — Database
 php artisan migrate --force
 php artisan db:seed --class=ProductionSeeder --force
+
+# 4b — Recommender vectors (needs Node, same as the asset build)
+php artisan catalog:embed
 
 # 5 — Uploads + caches
 php artisan storage:link
@@ -397,6 +400,12 @@ php artisan queue:restart
 php artisan up
 ```
 
+If the release you are leaving changed `App\Services\CatalogEmbedder` — the
+text each product is described by, or the model name — run
+`php artisan catalog:embed --force` afterwards. Stored vectors carry the model
+that wrote them and a hash of the exact text embedded, so a plain
+`catalog:embed` re-embeds only what actually differs.
+
 Migrations are the part that does not roll back cleanly. If the release you are
 reverting added one, restore the pre-deploy database dump rather than running
 `migrate:rollback` against live data.
@@ -408,6 +417,7 @@ reverting added one, restore the pre-deploy database dump rather than running
 | Symptom | Cause | Fix |
 |---|---|---|
 | Page loads with no CSS/JS | `public/build` missing | `npm ci && npm run build` |
+| "You may also like" looks unrelated, or is missing | `catalog:embed` never ran, so the recommender is on its attribute fallback | `php artisan catalog:embed` |
 | Face scanner never starts | `public/mediapipe` missing | `npm run mediapipe` (needs outbound HTTPS) |
 | Frame photos 404 | storage symlink missing | `php artisan storage:link` |
 | Blank white 500 | unwritable `storage/` or `bootstrap/cache` | fix ownership (§6), then `php artisan optimize:clear` |
@@ -431,6 +441,7 @@ production env template).
 - [ ] Database user is app-scoped, not `root`
 - [ ] `MAIL_MAILER` is a real transport, `MAIL_FROM_ADDRESS` on your domain
 - [ ] Queue worker running and surviving a reboot
+- [ ] `php artisan catalog:embed` has run: `SELECT COUNT(*) FROM product_embeddings;` matches the number of active frames plus contact lenses
 - [ ] Nightly database + `storage/app` backups, and one restore rehearsed
 - [ ] No demo accounts: `SELECT email, role FROM users WHERE email LIKE '%@example.com';` returns nothing
 - [ ] Staff know the drill: cash is only recorded as collected when they set an order to Paid or Delivered in `/admin/orders`

@@ -162,7 +162,7 @@
         :products="$similarFrames"
         :eyebrow="__('Similar')"
         :title="__('You may also like')"
-        :note="__('Matched on shape, fit and material — and on what other shoppers looked at alongside this frame.')"
+        :note="__('The closest frames in the catalogue to this one, and what other shoppers opened alongside it.')"
     />
 
     <script>

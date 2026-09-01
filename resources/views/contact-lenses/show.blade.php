@@ -95,6 +95,6 @@
         :products="$similarLenses"
         :eyebrow="__('Similar')"
         :title="__('You may also like')"
-        :note="__('Same replacement schedule and a comparable fit — matched on base curve, diameter and cost per lens.')"
+        :note="__('The closest lenses in the catalogue on wear schedule, material and fit, and what other shoppers opened alongside these.')"
     />
 </x-layout>

@@ -10,10 +10,13 @@ use App\Models\Lens;
 use App\Models\Order;
 use App\Models\OrderContactLens;
 use App\Models\OrderEyeglass;
+use App\Models\ProductEmbedding;
 use App\Models\ProductView;
 use App\Models\User;
+use App\Services\CatalogEmbedder;
 use App\Services\Recommender;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Tests\TestCase;
 
 class RecommenderTest extends TestCase
@@ -293,6 +296,277 @@ class RecommenderTest extends TestCase
 
         $this->assertTrue($recommended->contains(fn ($f) => $f->is($other)));
         $this->assertFalse($recommended->contains(fn ($f) => $f->is($bought)));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Semantic similarity
+    |--------------------------------------------------------------------------
+    |
+    | These build vectors by hand rather than running the transformer. The
+    | model is a build-time dependency and a fixed function of its input —
+    | running it here would make the suite slow and prove nothing about this
+    | code. What needs testing is the ranking built on top of the vectors,
+    | which is exactly what hand-placed points in a known space pin down.
+    |
+    */
+
+    /**
+     * Store a unit-length embedding for a product, normalizing whatever
+     * coordinates the test asked for.
+     *
+     * @param  array<int, float>  $coordinates
+     */
+    private function embed(Frame|ContactLens $product, array $coordinates, string $model = CatalogEmbedder::MODEL): void
+    {
+        $length = sqrt(array_sum(array_map(fn ($v) => $v * $v, $coordinates)));
+        $unit = array_map(fn ($v) => $v / $length, $coordinates);
+
+        ProductEmbedding::updateOrCreate(
+            [
+                'embeddable_type' => $product->getMorphClass(),
+                'embeddable_id' => $product->getKey(),
+            ],
+            [
+                'model' => $model,
+                'dimensions' => count($unit),
+                'vector' => ProductEmbedding::encode($unit),
+                'content_hash' => hash('sha256', $product->name),
+            ],
+        );
+
+        Cache::forget(CatalogEmbedder::CACHE_KEY);
+    }
+
+    public function test_a_vector_survives_the_round_trip_through_storage(): void
+    {
+        $original = [0.5, -0.25, 0.125, 0.0625];
+
+        $decoded = ProductEmbedding::decode(ProductEmbedding::encode($original));
+
+        $this->assertCount(4, $decoded);
+
+        foreach ($original as $i => $value) {
+            $this->assertEqualsWithDelta($value, $decoded[$i], 1e-6);
+        }
+    }
+
+    public function test_it_ranks_by_distance_in_embedding_space(): void
+    {
+        // Deliberately identical on every attribute, so the old scoring
+        // could not separate them and only the vectors can.
+        $seed = $this->frame(['name' => 'Seed']);
+        $near = $this->frame(['name' => 'Near']);
+        $mid = $this->frame(['name' => 'Mid']);
+
+        $this->embed($seed, [1.0, 0.0]);
+        $this->embed($near, [0.95, 0.31]);   // cosine ~0.95
+        $this->embed($mid, [0.55, 0.84]);    // cosine ~0.55
+
+        $ranked = $this->recommender()->similarTo($seed);
+
+        $this->assertSame(['Near', 'Mid'], $ranked->pluck('name')->all());
+    }
+
+    public function test_it_drops_products_below_the_cosine_floor(): void
+    {
+        $seed = $this->frame(['name' => 'Seed']);
+        $related = $this->frame(['name' => 'Related']);
+        $unrelated = $this->frame(['name' => 'Unrelated']);
+
+        $this->embed($seed, [1.0, 0.0]);
+        $this->embed($related, [0.9, 0.44]);
+        // cosine ~0.10, well under the 0.30 floor.
+        $this->embed($unrelated, [0.1, 0.995]);
+
+        $ranked = $this->recommender()->similarTo($seed);
+
+        $this->assertTrue($ranked->contains(fn ($f) => $f->is($related)));
+        $this->assertFalse($ranked->contains(fn ($f) => $f->is($unrelated)));
+    }
+
+    public function test_similar_stays_inside_one_catalog(): void
+    {
+        $seed = $this->frame(['name' => 'Seed']);
+        $lens = $this->lens(['name' => 'Very Close Lens']);
+        $frame = $this->frame(['name' => 'Slightly Further Frame']);
+
+        // The lens sits nearer the seed than the frame does, and is still
+        // not an alternative to a pair of glasses.
+        $this->embed($seed, [1.0, 0.0]);
+        $this->embed($lens, [0.99, 0.14]);
+        $this->embed($frame, [0.8, 0.6]);
+
+        $ranked = $this->recommender()->similarTo($seed);
+
+        $this->assertTrue($ranked->contains(fn ($p) => $p->is($frame)));
+        $this->assertFalse($ranked->contains(fn ($p) => $p->is($lens)));
+    }
+
+    public function test_the_personalized_rail_does_cross_catalogs(): void
+    {
+        $viewed = $this->frame(['name' => 'Viewed']);
+        $lens = $this->lens(['name' => 'Matching Lens']);
+
+        $this->embed($viewed, [1.0, 0.0]);
+        $this->embed($lens, [0.9, 0.44]);
+
+        $this->logView($viewed, session: 'guest');
+
+        $recommended = $this->recommender()->forShopper(null, 'guest');
+
+        $this->assertTrue($recommended->contains(fn ($p) => $p->is($lens)));
+    }
+
+    public function test_the_taste_vector_sits_between_the_seeds(): void
+    {
+        $left = $this->frame(['name' => 'Left']);
+        $right = $this->frame(['name' => 'Right']);
+        $between = $this->frame(['name' => 'Between']);
+        $beyond = $this->frame(['name' => 'Beyond']);
+
+        // Two seeds at right angles; the centroid points between them.
+        $this->embed($left, [1.0, 0.0]);
+        $this->embed($right, [0.0, 1.0]);
+        // Sits on the bisector — nearest the centroid, though it is not the
+        // nearest neighbour of either seed on its own.
+        $this->embed($between, [0.707, 0.707]);
+        // Closer to one seed than $between is, but away from the centroid.
+        $this->embed($beyond, [0.98, -0.2]);
+
+        $this->logView($left, session: 'guest');
+        $this->logView($right, session: 'guest');
+
+        $recommended = $this->recommender()->forShopper(null, 'guest');
+
+        $this->assertTrue($recommended->first()->is($between));
+    }
+
+    public function test_it_ignores_vectors_from_a_different_model(): void
+    {
+        $seed = $this->frame(['name' => 'Seed']);
+        $near = $this->frame(['name' => 'Near']);
+        $stale = $this->frame(['name' => 'Stale']);
+
+        $this->embed($seed, [1.0, 0.0]);
+        $this->embed($near, [0.9, 0.44]);
+        // Identical coordinates to the seed, so this would rank first if the
+        // model filter were missing — but coordinates from one model mean
+        // nothing in another's space, and must never be compared across.
+        $this->embed($stale, [1.0, 0.0], model: 'some/older-model');
+
+        $ranked = $this->recommender()->similarTo($seed);
+
+        $this->assertTrue($ranked->contains(fn ($f) => $f->is($near)));
+        $this->assertFalse(
+            $ranked->contains(fn ($f) => $f->is($stale)),
+            'A vector from another model was treated as comparable.',
+        );
+    }
+
+    public function test_an_empty_semantic_result_is_not_padded_from_attributes(): void
+    {
+        // Identical on every attribute — the fallback would happily pair
+        // them — but the model places them far apart, and that answer stands.
+        $seed = $this->frame(['name' => 'Seed']);
+        $other = $this->frame(['name' => 'Other']);
+
+        $this->embed($seed, [1.0, 0.0]);
+        $this->embed($other, [0.05, 0.99]);
+
+        $this->assertTrue($this->recommender()->similarTo($seed)->isEmpty());
+    }
+
+    public function test_it_falls_back_to_attributes_when_a_product_has_no_vector(): void
+    {
+        // Nothing embedded at all — the catalog:embed step has not run.
+        $seed = $this->frame(['shape' => 'cat_eye', 'brand' => 'Lumen']);
+        $match = $this->frame(['shape' => 'cat_eye', 'brand' => 'Lumen']);
+
+        $ranked = $this->recommender()->similarTo($seed);
+
+        $this->assertTrue($ranked->contains(fn ($f) => $f->is($match)));
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Keeping embeddings honest
+    |--------------------------------------------------------------------------
+    */
+
+    public function test_selling_a_unit_does_not_invalidate_an_embedding(): void
+    {
+        $frame = $this->frame(['stock' => 10]);
+        $embedder = $this->app->make(CatalogEmbedder::class);
+
+        ProductEmbedding::create([
+            'embeddable_type' => $frame->getMorphClass(),
+            'embeddable_id' => $frame->getKey(),
+            'model' => CatalogEmbedder::MODEL,
+            'dimensions' => 2,
+            'vector' => ProductEmbedding::encode([1.0, 0.0]),
+            'content_hash' => hash('sha256', $embedder->describe($frame)),
+        ]);
+
+        $frame->update(['stock' => 9]);
+
+        // Stock is not part of the described text, so re-embedding the whole
+        // catalog after every checkout would be pure waste.
+        $this->assertDatabaseCount('product_embeddings', 1);
+    }
+
+    public function test_renaming_a_product_invalidates_its_embedding(): void
+    {
+        $frame = $this->frame(['name' => 'Harbor Classic']);
+        $embedder = $this->app->make(CatalogEmbedder::class);
+
+        ProductEmbedding::create([
+            'embeddable_type' => $frame->getMorphClass(),
+            'embeddable_id' => $frame->getKey(),
+            'model' => CatalogEmbedder::MODEL,
+            'dimensions' => 2,
+            'vector' => ProductEmbedding::encode([1.0, 0.0]),
+            'content_hash' => hash('sha256', $embedder->describe($frame)),
+        ]);
+
+        $frame->update(['name' => 'Harbor Reader', 'shape' => 'aviator']);
+
+        $this->assertDatabaseCount('product_embeddings', 0);
+    }
+
+    public function test_the_described_document_reads_as_prose(): void
+    {
+        $frame = $this->frame([
+            'name' => 'Harbor Classic', 'brand' => 'Optix', 'shape' => 'cat_eye',
+            'type' => 'semi_rimless', 'material' => 'acetate', 'color' => 'Tortoise',
+            'price' => 89,
+        ]);
+
+        $document = $this->app->make(CatalogEmbedder::class)->describe($frame);
+
+        // The enums have to reach the model as English, not as column values:
+        // "cat_eye" is one unknown token, "cat-eye" is a described shape.
+        $this->assertStringContainsString('cat-eye', $document);
+        $this->assertStringContainsString('semi-rimless', $document);
+        $this->assertStringNotContainsString('cat_eye', $document);
+        $this->assertStringNotContainsString('semi_rimless', $document);
+
+        $this->assertStringContainsString('Harbor Classic', $document);
+        $this->assertStringContainsString('Optix', $document);
+        $this->assertStringContainsString('tortoise', $document);
+        $this->assertStringContainsString('$89.00', $document);
+    }
+
+    public function test_a_lens_document_states_the_per_lens_price(): void
+    {
+        $lens = $this->lens(['name' => 'DailyClear', 'pack_size' => 30, 'price' => 45]);
+
+        $document = $this->app->make(CatalogEmbedder::class)->describe($lens);
+
+        // $1.50 per lens is the number a wearer compares on, and it is in no
+        // column — a 30-pack at $45 looks dearer than a 6-pack at $18.
+        $this->assertStringContainsString('$1.50 per lens', $document);
+        $this->assertStringContainsString('daily disposable', $document);
     }
 
     public function test_it_recommends_nothing_to_a_shopper_with_no_history(): void
