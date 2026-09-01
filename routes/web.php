@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\CollectionController as AdminCollectionController;
+use App\Http\Controllers\Admin\ContactMessageController as AdminContactMessageController;
 use App\Http\Controllers\Admin\ContactLensController as AdminContactLensController;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboardController;
 use App\Http\Controllers\Admin\FrameController as AdminFrameController;
@@ -14,10 +15,12 @@ use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\AboutController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\CollectionController;
 use App\Http\Controllers\ContactLensController;
+use App\Http\Controllers\ContactMessageController;
 use App\Http\Controllers\FaceMatchController;
 use App\Http\Controllers\FrameController;
 use App\Http\Controllers\HomeController;
@@ -44,6 +47,15 @@ Route::get('/contact-lenses/{contactLens}', [ContactLensController::class, 'show
 
 Route::get('/collections', [CollectionController::class, 'index'])->name('collections.index');
 Route::get('/collections/{collection}', [CollectionController::class, 'show'])->name('collections.show');
+
+Route::get('/about', [AboutController::class, 'index'])->name('about');
+
+// Open to guests — someone deciding whether to buy has no account yet. Rate
+// limited because of it: six enquiries a minute is far more than a person
+// sends and far less than a script wants.
+Route::post('/contact', [ContactMessageController::class, 'store'])
+    ->middleware('throttle:6,1')
+    ->name('contact.store');
 
 Route::get('/face-match', [FaceMatchController::class, 'create'])->name('face-match.create');
 Route::post('/face-match', [FaceMatchController::class, 'analyze'])->name('face-match.analyze');
@@ -183,6 +195,10 @@ Route::middleware(['auth', 'admin'])->prefix('admin')->name('admin.')->group(fun
     Route::get('/prescriptions', [AdminPrescriptionController::class, 'index'])->name('prescriptions.index');
     Route::get('/prescriptions/{prescription}', [AdminPrescriptionController::class, 'show'])->name('prescriptions.show');
     Route::patch('/prescriptions/{prescription}/verify', [AdminPrescriptionController::class, 'verify'])->name('prescriptions.verify');
+
+    Route::get('/messages', [AdminContactMessageController::class, 'index'])->name('messages.index');
+    Route::patch('/messages/{message}/status', [AdminContactMessageController::class, 'updateStatus'])->name('messages.status');
+    Route::delete('/messages/{message}', [AdminContactMessageController::class, 'destroy'])->name('messages.destroy');
 
     Route::get('/reviews', [AdminReviewController::class, 'index'])->name('reviews.index');
     Route::patch('/reviews/{review}/approve', [AdminReviewController::class, 'approve'])->name('reviews.approve');

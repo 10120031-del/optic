@@ -56,6 +56,7 @@
                         {{ __('beta') }}
                     </span>
                 </a>
+                <a href="{{ route('about') }}" class="nav-link {{ request()->routeIs('about') ? 'is-active' : '' }}">{{ __('About') }}</a>
                 @auth
                     @unless ($isEmployee)
                         <a href="{{ route('orders.index') }}" class="nav-link {{ request()->routeIs('orders.*') ? 'is-active' : '' }}">{{ __('Orders') }}</a>
@@ -114,6 +115,7 @@
             <a href="{{ route('frames.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('frames.*') ? 'is-active' : '' }}">{{ __('Eyeglasses') }}</a>
             <a href="{{ route('contact-lenses.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('contact-lenses.*') ? 'is-active' : '' }}">{{ __('Contacts') }}</a>
             <a href="{{ route('face-match.create') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('face-match.*') ? 'is-active' : '' }}">{{ __('AI Match') }}</a>
+            <a href="{{ route('about') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('about') ? 'is-active' : '' }}">{{ __('About') }}</a>
             @auth
                 <a href="{{ route('notifications.index') }}" class="nav-link whitespace-nowrap {{ request()->routeIs('notifications.*') ? 'is-active' : '' }}">
                     {{ __('Inbox') }}@if ($unreadNotifications > 0) ({{ $unreadNotifications }})@endif
@@ -156,13 +158,32 @@
                         <span class="font-display text-sm font-semibold">Lucent Optics</span>
                     </div>
                     <p class="mt-2 max-w-xs text-sm text-ink-soft">{{ __('Precision eyewear, fitted with an AI face-shape match and lenses built to your prescription.') }}</p>
+
+                    {{-- Details come from config/contact.php, the same source the
+                         About page reads, so the two can never disagree. --}}
+                    <p class="mt-3 space-x-3 font-mono text-[11px] text-ink-faint">
+                        @if (filled(config('contact.phone')))
+                            <a href="tel:{{ preg_replace('/[^\d+]/', '', (string) config('contact.phone')) }}" class="hover:text-ink">{{ config('contact.phone') }}</a>
+                        @endif
+                        @if (filled(config('contact.email')))
+                            <a href="mailto:{{ config('contact.email') }}" class="hover:text-ink">{{ config('contact.email') }}</a>
+                        @endif
+                    </p>
+
+                    <x-social-links size="sm" class="mt-4" />
                 </div>
-                <div class="flex gap-12 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft">
+                <div class="flex flex-wrap gap-12 font-mono text-[11px] uppercase tracking-[0.08em] text-ink-soft">
                     <div class="space-y-2">
                         <p class="text-ink-faint">{{ __('Shop') }}</p>
                         <a href="{{ route('frames.index') }}" class="block hover:text-ink">{{ __('Eyeglasses') }}</a>
                         <a href="{{ route('contact-lenses.index') }}" class="block hover:text-ink">{{ __('Contact Lenses') }}</a>
                         <a href="{{ route('face-match.create') }}" class="block hover:text-ink">{{ __('AI Face Match') }}</a>
+                    </div>
+                    <div class="space-y-2">
+                        <p class="text-ink-faint">{{ __('Company') }}</p>
+                        <a href="{{ route('about') }}" class="block hover:text-ink">{{ __('About us') }}</a>
+                        <a href="{{ route('about') }}#contact" class="block hover:text-ink">{{ __('Contact us') }}</a>
+                        <a href="{{ route('collections.index') }}" class="block hover:text-ink">{{ __('Collections') }}</a>
                     </div>
                     <div class="space-y-2">
                         <p class="text-ink-faint">{{ __('Account') }}</p>
@@ -186,6 +207,11 @@
             <p class="hairline-top mt-8 pt-6 font-mono text-[10.5px] text-ink-faint">&copy; {{ date('Y') }} Lucent Optics.</p>
         </div>
     </footer>
+
+    {{-- Customer support channel, so it follows the same staff/customer split as the cart. --}}
+    @unless ($isEmployee)
+        <x-whatsapp-chat />
+    @endunless
 
     @stack('scripts')
 </body>

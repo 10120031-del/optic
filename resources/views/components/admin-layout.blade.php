@@ -4,6 +4,14 @@
     $unreadNotifications = auth()->check() ? auth()->user()->unreadNotifications()->count() : 0;
     $user = auth()->user();
 
+    // Counted here, next to the unread-notification count, so the Messages tab
+    // carries its badge on every console page rather than only on whichever
+    // controller remembered to pass it. Skipped for delivery accounts, who
+    // never see the tab.
+    $newContactMessages = $user?->canAccessAdminConsole()
+        ? \App\Models\ContactMessage::unhandled()->count()
+        : 0;
+
     $allNavItems = [
         ['label' => __('Inbox'), 'route' => 'notifications.index', 'pattern' => 'notifications.*', 'badge' => $unreadNotifications, 'roles' => ['owner', 'staff', 'delivery']],
         ['label' => __('Dashboard'), 'route' => 'admin.dashboard', 'pattern' => 'admin.dashboard', 'roles' => ['owner', 'staff']],
@@ -16,6 +24,7 @@
         ['label' => __('Returns'), 'route' => 'admin.returns.index', 'pattern' => 'admin.returns.*', 'roles' => ['owner', 'staff']],
         ['label' => __('Prescriptions'), 'route' => 'admin.prescriptions.index', 'pattern' => 'admin.prescriptions.*', 'roles' => ['owner', 'staff']],
         ['label' => __('Reviews'), 'route' => 'admin.reviews.index', 'pattern' => 'admin.reviews.*', 'roles' => ['owner', 'staff']],
+        ['label' => __('Messages'), 'route' => 'admin.messages.index', 'pattern' => 'admin.messages.*', 'badge' => $newContactMessages, 'roles' => ['owner', 'staff']],
         ['label' => __('Team'), 'route' => 'admin.users.index', 'pattern' => 'admin.users.*', 'roles' => ['owner']],
         ['label' => __('Promotions'), 'route' => 'admin.promotions.index', 'pattern' => 'admin.promotions.*', 'roles' => ['owner']],
     ];

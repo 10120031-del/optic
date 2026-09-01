@@ -441,6 +441,8 @@ production env template).
 - [ ] Database user is app-scoped, not `root`
 - [ ] `MAIL_MAILER` is a real transport, `MAIL_FROM_ADDRESS` on your domain
 - [ ] Queue worker running and surviving a reboot
+- [ ] `WHATSAPP_NUMBER` is the shop's real number in full international form (country code, no `+`, no local leading zero) — the storefront chat button hides itself while it is empty, and a wrong number silently sends customers to a stranger
+- [ ] The `CONTACT_*` block points at the shop's real phone, e-mail, address and social accounts — the About page and the footer print them verbatim, and the defaults in `config/contact.php` are placeholders for a fictional shop. Blank any social account that does not exist rather than leaving the placeholder: an empty value hides the icon, a wrong one links customers to somebody else
 - [ ] `php artisan catalog:embed` has run: `SELECT COUNT(*) FROM product_embeddings;` matches the number of active frames plus contact lenses
 - [ ] Nightly database + `storage/app` backups, and one restore rehearsed
 - [ ] No demo accounts: `SELECT email, role FROM users WHERE email LIKE '%@example.com';` returns nothing

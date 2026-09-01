@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Collection as ProductCollection;
 use App\Models\ContactLens;
+use App\Models\ContactMessage;
 use App\Models\Frame;
 use App\Models\Order;
 use App\Models\OrderReturn;
@@ -356,6 +357,32 @@ class Notifier
         ));
 
         return $customers->count();
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Contact enquiries
+    |--------------------------------------------------------------------------
+    */
+
+    /**
+     * Somebody wrote in from the About page's contact form.
+     *
+     * Staff only — the sender already got their confirmation on the page they
+     * submitted from, and is usually a visitor with no inbox to write to.
+     */
+    public function contactMessageReceived(ContactMessage $message): void
+    {
+        $this->toStaff(new InboxNotification(
+            event: 'admin.contact.received',
+            title: __('New message: :topic', ['topic' => $message->topicLabel()]),
+            body: __(':sender wrote: :excerpt', [
+                'sender' => $message->name,
+                'excerpt' => Str::limit($message->message, 140),
+            ]),
+            url: route('admin.messages.index', absolute: false),
+            level: 'info',
+        ));
     }
 
     /*
