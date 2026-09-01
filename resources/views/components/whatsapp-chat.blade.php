@@ -21,6 +21,8 @@
         'shop' => config('whatsapp.label'),
         'url' => url()->current(),
     ]);
+
+    $waUrl = 'https://wa.me/'.$number.($prefill !== '' ? '?text='.rawurlencode($prefill) : '');
 @endphp
 
 @if (config('whatsapp.enabled') && $number !== '')
@@ -52,7 +54,7 @@
             </p>
         </div>
 
-        <form class="hairline-top space-y-3 p-4" data-whatsapp-form>
+        <div class="hairline-top space-y-3 p-4">
             <label class="field-label" for="whatsapp-message">{{ __('Your message') }}</label>
             <textarea
                 id="whatsapp-message"
@@ -61,18 +63,31 @@
                 data-whatsapp-input
             >{{ $prefill }}</textarea>
 
-            <button type="submit" class="btn-accent w-full !bg-[#25D366] !text-ink hover:!bg-[#1eb457]">
+            {{-- A real <a href>, not a JS window.open: iOS Universal Links and Android
+                 App Links only hand a wa.me URL straight to the installed WhatsApp app
+                 when the navigation comes from a genuine user click on a link. A
+                 programmatic window.open is treated as an ordinary web navigation, which
+                 is what routes people through the wa.me web page first. The href is
+                 rendered server-side so it also works with JS off, and the script below
+                 keeps it in sync as the message is edited. --}}
+            <a
+                href="{{ $waUrl }}"
+                target="_blank"
+                rel="noopener"
+                class="btn-accent w-full !bg-[#25D366] !text-ink hover:!bg-[#1eb457]"
+                data-whatsapp-link
+            >
                 <svg viewBox="0 0 24 24" fill="currentColor" class="size-4" aria-hidden="true">
                     <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.174.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51a12.8 12.8 0 0 0-.57-.01c-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347Z" />
                     <path d="M12.05 2C6.5 2 2 6.5 2 12.05c0 1.77.46 3.5 1.34 5.02L2 22l5.06-1.32a10 10 0 0 0 4.99 1.32h.01c5.55 0 10.05-4.5 10.05-10.05C22.1 6.5 17.6 2 12.05 2Zm0 18.32h-.01a8.3 8.3 0 0 1-4.24-1.16l-.3-.18-3.15.82.84-3.07-.2-.32a8.3 8.3 0 1 1 7.06 3.91Z" />
                 </svg>
                 {{ __('Open WhatsApp') }}
-            </button>
+            </a>
 
             <p class="text-center font-mono text-[10px] leading-relaxed text-ink-faint">
                 {{ __('Opens in WhatsApp. We never see your number until you send.') }}
             </p>
-        </form>
+        </div>
     </div>
 
     <button
@@ -120,14 +135,16 @@
             }
         });
 
-        root.querySelector('[data-whatsapp-form]').addEventListener('submit', (e) => {
-            e.preventDefault();
-            // wa.me hands off to the installed app on mobile and to
-            // web.whatsapp.com on desktop — no detection needed on our side.
-            const url = 'https://wa.me/' + number + '?text=' + encodeURIComponent(input.value.trim());
-            window.open(url, '_blank', 'noopener');
-            setOpen(false);
+        // Keep the link's href current as the visitor edits their message, so the
+        // click itself stays a plain link navigation and nothing has to be
+        // intercepted. wa.me then hands off to the installed app on mobile, or to
+        // web.whatsapp.com on desktop — no platform detection needed on our side.
+        const link = root.querySelector('[data-whatsapp-link]');
+        input.addEventListener('input', () => {
+            const text = input.value.trim();
+            link.href = 'https://wa.me/' + number + (text ? '?text=' + encodeURIComponent(text) : '');
         });
+        link.addEventListener('click', () => setOpen(false));
     })();
 </script>
 @endpush
