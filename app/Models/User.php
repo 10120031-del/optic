@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Notifications\ResetPasswordNotification;
+use App\Notifications\VerifyEmailNotification;
 use App\Observers\UserObserver;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\ObservedBy;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,7 +15,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 #[ObservedBy(UserObserver::class)]
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
@@ -55,6 +57,27 @@ class User extends Authenticatable
             'password' => 'hashed',
             'newsletter_opt_in' => 'boolean',
         ];
+    }
+
+    /**
+     * Send the reset link through our own template instead of Laravel's
+     * generic markdown mail, so the message looks like the rest of the shop's
+     * email. Not queued: the person is sitting on the "check your inbox" page
+     * waiting for it, and QUEUE_CONNECTION is `database` — a stopped worker
+     * would leave them waiting indefinitely.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
+    }
+
+    /**
+     * Same reasoning as sendPasswordResetNotification() above: own template,
+     * sent in-request rather than queued.
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new VerifyEmailNotification);
     }
 
     public function profile(): HasOne

@@ -140,6 +140,27 @@
 
     <main id="main" class="mx-auto max-w-7xl px-6 py-10">
         <x-flash />
+
+        {{--
+            Nothing is gated on a confirmed address today, so this reminder is
+            the whole enforcement: it follows an unverified account around the
+            site until they click the link. Hidden on the verification pages
+            themselves, which already say all of this.
+        --}}
+        @auth
+            @if (! auth()->user()->hasVerifiedEmail() && ! request()->routeIs('verification.*'))
+                <div class="panel border-warn/30 bg-warn-soft mb-6 flex items-start gap-3 px-4 py-3" role="status">
+                    <svg class="mt-0.5 size-4 shrink-0 text-warn" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6">
+                        <path d="M3 5.5h14v9H3z" /><path d="M3 6l7 5 7-5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <p class="text-sm text-ink">
+                        {{ __('Confirm your email address so we can send you order and delivery updates.') }}
+                        <a href="{{ route('verification.notice') }}" class="text-accent underline hover:no-underline">{{ __('Resend the link') }}</a>
+                    </p>
+                </div>
+            @endif
+        @endauth
+
         {{ $slot }}
     </main>
 

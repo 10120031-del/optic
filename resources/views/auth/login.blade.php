@@ -20,10 +20,13 @@
                 <label class="field-label" for="password">{{ __('Password') }}</label>
                 <input type="password" id="password" name="password" required class="input">
             </div>
-            <label class="flex items-center gap-2 text-sm text-ink-soft">
-                <input type="checkbox" name="remember" class="checkbox">
-                {{ __('Keep me signed in') }}
-            </label>
+            <div class="flex items-center justify-between gap-3">
+                <label class="flex items-center gap-2 text-sm text-ink-soft">
+                    <input type="checkbox" name="remember" class="checkbox">
+                    {{ __('Keep me signed in') }}
+                </label>
+                <a href="{{ route('password.request') }}" class="text-sm text-ink-soft underline hover:text-ink hover:no-underline">{{ __('Forgot password?') }}</a>
+            </div>
             <button type="submit" class="btn-accent w-full">{{ __('Sign in') }}</button>
         </form>
 

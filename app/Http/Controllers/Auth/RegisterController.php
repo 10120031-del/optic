@@ -45,6 +45,10 @@ class RegisterController extends Controller
         $request->session()->regenerate();
         $carts->mergeSessionCartIntoUser($request, $user);
 
-        return redirect()->intended(route('home'));
+        // The Registered event above has already mailed a confirmation link
+        // (User implements MustVerifyEmail). Land them on the page that says
+        // so — it's the only place that explains the email they're about to
+        // get, and it has a "keep browsing" way out, so nothing is blocked.
+        return redirect()->route('verification.notice');
     }
 }

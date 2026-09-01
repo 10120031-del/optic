@@ -13,8 +13,11 @@ use App\Http\Controllers\Admin\PrescriptionController as AdminPrescriptionContro
 use App\Http\Controllers\Admin\PromotionCampaignController;
 use App\Http\Controllers\Admin\ReviewController as AdminReviewController;
 use App\Http\Controllers\Admin\UserController as AdminUserController;
+use App\Http\Controllers\Auth\EmailVerificationController;
+use App\Http\Controllers\Auth\ForgotPasswordController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\Auth\ResetPasswordController;
 use App\Http\Controllers\AboutController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CheckoutController;
@@ -84,6 +87,45 @@ Route::middleware('guest')->group(function () {
     Route::post('/register', [RegisterController::class, 'store']);
     Route::get('/login', [LoginController::class, 'create'])->name('login');
     Route::post('/login', [LoginController::class, 'store']);
+
+    // Password reset. Both POSTs are throttled: the first mails someone on
+    // request (so it is a way to have the shop send mail to an arbitrary
+    // address), and the second is where a guessed token would be tried.
+    Route::get('/forgot-password', [ForgotPasswordController::class, 'create'])->name('password.request');
+    Route::post('/forgot-password', [ForgotPasswordController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('password.email');
+    Route::get('/reset-password/{token}', [ResetPasswordController::class, 'create'])->name('password.reset');
+    Route::post('/reset-password', [ResetPasswordController::class, 'store'])
+        ->middleware('throttle:6,1')
+        ->name('password.store');
+});
+
+/*
+|--------------------------------------------------------------------------
+| Email verification
+|--------------------------------------------------------------------------
+|
+| Outside the 'customer' group so staff and delivery accounts can confirm an
+| address too, and outside 'guest' because every step needs to know who is
+| being verified.
+|
+*/
+
+Route::middleware('auth')->group(function () {
+    Route::get('/email/verify', [EmailVerificationController::class, 'notice'])->name('verification.notice');
+
+    // 'signed' is what actually does the verifying — the link carries an
+    // expiring signature over the user id and a hash of their address, so it
+    // can't be edited to confirm someone else or replayed after an address
+    // change.
+    Route::get('/email/verify/{id}/{hash}', [EmailVerificationController::class, 'verify'])
+        ->middleware(['signed', 'throttle:6,1'])
+        ->name('verification.verify');
+
+    Route::post('/email/verification-notification', [EmailVerificationController::class, 'send'])
+        ->middleware('throttle:6,1')
+        ->name('verification.send');
 });
 
 Route::post('/logout', [LoginController::class, 'destroy'])->name('logout');
