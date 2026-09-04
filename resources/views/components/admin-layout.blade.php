@@ -52,9 +52,9 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-paper text-ink">
-    <div class="flex min-h-screen">
-        <aside class="hairline-bottom md:hairline-bottom-0 md:border-r md:border-hairline flex w-full shrink-0 flex-col md:w-60">
-            <div class="hairline-bottom flex items-center gap-2.5 px-6 py-5">
+    <div class="flex min-h-screen flex-col md:flex-row">
+        <aside class="flex w-full shrink-0 flex-col border-b border-hairline md:w-60 md:border-b-0 md:border-r">
+            <div class="hairline-bottom flex items-center gap-2.5 px-4 py-4 sm:px-6 md:py-5">
                 <span class="tick-frame flex size-8 items-center justify-center">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" class="size-4">
                         <circle cx="8" cy="12" r="5.2" />
@@ -68,20 +68,20 @@
                 </div>
             </div>
 
-            <nav class="flex-1 space-y-0.5 overflow-x-auto px-3 py-4 md:overflow-visible" aria-label="Admin">
+            <nav class="flex flex-1 gap-1 overflow-x-auto px-3 py-2 md:block md:space-y-0.5 md:gap-0 md:overflow-visible md:py-4" aria-label="Admin">
                 @foreach ($navItems as $item)
                     <a href="{{ route($item['route']) }}"
-                       class="flex items-center gap-2.5 whitespace-nowrap rounded-[3px] px-3 py-2 text-sm transition-colors
+                       class="flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-[3px] px-3 py-2 text-sm transition-colors md:shrink
                               {{ request()->routeIs($item['pattern']) ? 'bg-ink text-white' : 'text-ink-soft hover:bg-wash hover:text-ink' }}">
                         {{ $item['label'] }}
                         @if (($item['badge'] ?? 0) > 0)
-                            <span class="ml-auto font-mono text-[10px] {{ request()->routeIs($item['pattern']) ? 'text-white/70' : 'text-ink-faint' }}">{{ $item['badge'] }}</span>
+                            <span class="font-mono text-[10px] md:ml-auto {{ request()->routeIs($item['pattern']) ? 'text-white/70' : 'text-ink-faint' }}">{{ $item['badge'] }}</span>
                         @endif
                     </a>
                 @endforeach
             </nav>
 
-            <div class="hairline-top space-y-2 px-6 py-5">
+            <div class="hairline-top flex items-center justify-between gap-4 px-4 py-3 sm:px-6 md:block md:space-y-2 md:py-5">
                 <a href="{{ route('home') }}" class="nav-link block text-xs">&larr; {{ __('Back to store') }}</a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf
@@ -91,10 +91,10 @@
         </aside>
 
         <div class="min-w-0 flex-1">
-            <main class="mx-auto max-w-6xl px-6 py-10 md:px-10">
+            <main class="mx-auto max-w-6xl px-4 py-8 sm:px-6 md:px-10 md:py-10">
                 @if ($heading)
                     <div class="mb-8">
-                        <h1 class="font-display text-2xl font-semibold text-ink">{{ $heading }}</h1>
+                        <h1 class="font-display text-xl font-semibold text-ink sm:text-2xl">{{ $heading }}</h1>
                         @isset($subheading)
                             <p class="mt-1 text-sm text-ink-soft">{{ $subheading }}</p>
                         @endisset

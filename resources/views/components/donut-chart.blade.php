@@ -36,7 +36,7 @@
 @if ($slices->isEmpty())
     <p class="text-sm text-ink-faint">{{ $empty ?? __('Nothing to chart yet.') }}</p>
 @else
-    <div class="flex flex-wrap items-center gap-6">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-4">
         <div class="relative shrink-0">
             <svg viewBox="0 0 42 42" class="size-32" role="img" aria-label="{{ $centerLabel ?? __('Distribution') }}">
                 <circle cx="21" cy="21" r="15.91549431" fill="none" stroke-width="5" style="stroke: var(--color-hairline)" />
@@ -66,7 +66,7 @@
             @endif
         </div>
 
-        <ul class="min-w-0 flex-1 space-y-2">
+        <ul class="w-full min-w-0 space-y-2 sm:w-auto sm:flex-1">
             @foreach ($slices as $index => $slice)
                 <li class="flex items-center gap-2.5 text-sm">
                     <span class="size-2.5 shrink-0 rounded-[2px]" style="background: {{ $palette[$index % count($palette)] }}"></span>
